@@ -126,10 +126,10 @@ public sealed class XliffUnitTests
     public void RenderSourceFoldsEverySegmentUnderTheRequestedRendering()
     {
         var placeholder = new PlaceholderPart("ph1", InlineCodeType.None, null, "[x]", null, null, null, true, true, ReorderHint.Yes, null, null);
-        XliffUnit unit = UnitOf(new XliffSegment(null, SegmentKind.Translatable, InlineContent.Create([new InlineTextPart("Tom & Jerry "), placeholder]), InlineContent.FromText("ok"), SegmentState.Translated, null));
+        XliffUnit unit = UnitOf(new XliffSegment(null, SegmentKind.Translatable, InlineContent.Create([new InlineTextPart("Salt & pepper "), placeholder]), InlineContent.FromText("ok"), SegmentState.Translated, null));
 
-        Assert.AreEqual("Tom &amp; Jerry [x]", unit.RenderSource(InlineRendering.Markup));
-        Assert.AreEqual("Tom & Jerry [x]", unit.RenderSource(InlineRendering.Plain));
+        Assert.AreEqual("Salt &amp; pepper [x]", unit.RenderSource(InlineRendering.Markup));
+        Assert.AreEqual("Salt & pepper [x]", unit.RenderSource(InlineRendering.Plain));
     }
 
     [TestMethod]

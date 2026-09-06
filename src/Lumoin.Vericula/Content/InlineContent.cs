@@ -42,9 +42,10 @@ public sealed record InlineContent
     /// empty sequence, and either case that ends up with no parts returns <see cref="Empty"/>. This is
     /// the only way to build a non-empty <see cref="InlineContent"/> from parts.
     /// </summary>
-    /// <param name="parts">The parts to build content from, in order.</param>
+    /// <param name="parts">The parts to build content from, in order; no element may be null.</param>
     /// <returns>The normalized content.</returns>
     /// <exception cref="ArgumentNullException">If <paramref name="parts"/> is null.</exception>
+    /// <exception cref="ArgumentException">If <paramref name="parts"/> contains a null element.</exception>
     public static InlineContent Create(IEnumerable<InlinePart> parts)
     {
         ArgumentNullException.ThrowIfNull(parts);
@@ -59,6 +60,11 @@ public sealed record InlineContent
 
         foreach(InlinePart part in parts)
         {
+            if(part is null)
+            {
+                throw new ArgumentException("A part must not be null.", nameof(parts));
+            }
+
             if(part is InlineTextPart text)
             {
                 pendingText = pendingText is null ? text : new InlineTextPart(pendingText.Text + text.Text);
@@ -111,11 +117,21 @@ public sealed record InlineContent
     public string TranslatableText => InlineTranslatability.Walk(this, ImmutableStack<bool>.Empty).Text;
 
     /// <summary>
-    /// Renders the content to one string. See the type's remarks for the exact rule; in short, a
-    /// <see cref="InlineRendering.Markup"/> render is plain text when the content has no codes and an
-    /// HTML fragment when it has at least one, while a <see cref="InlineRendering.Plain"/> render is
-    /// always plain text (XLIFF 2.1 §4.7.8's equality type B view).
+    /// Renders the content to one string: a <see cref="InlineRendering.Markup"/> render is plain text
+    /// when the content has no codes and an HTML fragment when it has at least one, while a
+    /// <see cref="InlineRendering.Plain"/> render is always plain text (XLIFF 2.1 §4.7.8's equality
+    /// type B view).
     /// </summary>
+    /// <remarks>
+    /// Per part, in a <see cref="InlineRendering.Markup"/> render: a text part renders verbatim when
+    /// the content has no codes, and with <c>&amp;</c>, <c>&lt;</c> and <c>&gt;</c> escaped when it
+    /// has codes; a code part renders, in this order of preference, its <see cref="OriginalData"/>
+    /// text when non-null (an empty data text renders empty), else a synthesized tag when
+    /// <see cref="WellKnownInlineTokens.TryResolve"/> gives a name, else its <c>disp</c> when
+    /// non-null, else its escaped <c>equiv</c>; annotation parts render nothing. In a
+    /// <see cref="InlineRendering.Plain"/> render every text part renders verbatim and every code
+    /// part renders its <c>equiv</c>, with nothing escaped; annotation parts render nothing.
+    /// </remarks>
     /// <param name="rendering">Which rendering to produce.</param>
     /// <returns>The rendered string.</returns>
     public string Render(InlineRendering rendering)
@@ -160,39 +176,16 @@ public sealed record InlineContent
         var text = new StringBuilder();
         foreach(InlinePart part in Parts)
         {
-            switch(part)
+            //InlinePart also covers AnnotationStartPart and AnnotationEndPart, which render nothing
+            //under either rendering: only text and codes carry visible content.
+            text.Append(part switch
             {
-                case InlineTextPart textPart:
-                {
-                    text.Append(textPart.Text);
-
-                    break;
-                }
-
-                case PlaceholderPart placeholder:
-                {
-                    text.Append(placeholder.Equiv);
-
-                    break;
-                }
-
-                case StartCodePart startCode:
-                {
-                    text.Append(startCode.Equiv);
-
-                    break;
-                }
-
-                case EndCodePart endCode:
-                {
-                    text.Append(endCode.Equiv);
-
-                    break;
-                }
-
-                //InlinePart also covers AnnotationStartPart and AnnotationEndPart, which render
-                //nothing under either rendering: only text and codes carry visible content.
-            }
+                InlineTextPart textPart => textPart.Text,
+                PlaceholderPart placeholder => placeholder.Equiv,
+                StartCodePart startCode => startCode.Equiv,
+                EndCodePart endCode => endCode.Equiv,
+                _ => string.Empty
+            });
         }
 
         return text.ToString();
@@ -210,45 +203,29 @@ public sealed record InlineContent
         var markup = new StringBuilder();
         foreach(InlinePart part in Parts)
         {
-            switch(part)
+            //Annotation parts render nothing under Markup either.
+            markup.Append(part switch
             {
-                case InlineTextPart textPart:
-                {
-                    markup.Append(escapeText ? EscapeMarkupText(textPart.Text) : textPart.Text);
-
-                    break;
-                }
-
-                case PlaceholderPart placeholder:
-                {
-                    string codeText = RenderCodeText(placeholder.Type, placeholder.SubType, placeholder.OriginalData, placeholder.Disp, placeholder.Equiv, out bool isTag);
-                    markup.Append(isTag ? $"<{codeText}/>" : codeText);
-
-                    break;
-                }
-
-                case StartCodePart startCode:
-                {
-                    string codeText = RenderCodeText(startCode.Type, startCode.SubType, startCode.OriginalData, startCode.Disp, startCode.Equiv, out bool isTag);
-                    markup.Append(isTag ? $"<{codeText}>" : codeText);
-
-                    break;
-                }
-
-                case EndCodePart endCode:
-                {
-                    string codeText = RenderCodeText(endCode.Type, endCode.SubType, endCode.OriginalData, endCode.Disp, endCode.Equiv, out bool isTag);
-                    markup.Append(isTag ? $"</{codeText}>" : codeText);
-
-                    break;
-                }
-
-                //Annotation parts render nothing under Markup either.
-            }
+                InlineTextPart textPart => escapeText ? EscapeMarkupText(textPart.Text) : textPart.Text,
+                PlaceholderPart placeholder => Wrap(RenderCodeText(placeholder.Type, placeholder.SubType, placeholder.OriginalData, placeholder.Disp, placeholder.Equiv), "<", "/>"),
+                StartCodePart startCode => Wrap(RenderCodeText(startCode.Type, startCode.SubType, startCode.OriginalData, startCode.Disp, startCode.Equiv), "<", ">"),
+                EndCodePart endCode => Wrap(RenderCodeText(endCode.Type, endCode.SubType, endCode.OriginalData, endCode.Disp, endCode.Equiv), "</", ">"),
+                _ => string.Empty
+            });
         }
 
         return markup.ToString();
     }
+
+    /// <summary>
+    /// Wraps a resolved code's text in <paramref name="open"/> and <paramref name="close"/> when it
+    /// is an element name to render as a tag; returns it verbatim otherwise.
+    /// </summary>
+    /// <param name="code">The resolved code text and whether it is a tag name to wrap, as returned by <see cref="RenderCodeText"/>.</param>
+    /// <param name="open">The delimiter to write before the tag name.</param>
+    /// <param name="close">The delimiter to write after the tag name.</param>
+    /// <returns>The text to append to the markup render.</returns>
+    private static string Wrap((string Text, bool IsTag) code, string open, string close) => code.IsTag ? open + code.Text + close : code.Text;
 
     /// <summary>
     /// Resolves what one code part contributes to a <see cref="InlineRendering.Markup"/> render: its
@@ -260,27 +237,20 @@ public sealed record InlineContent
     /// <param name="originalData">The code's resolved original data, or null when it carries none.</param>
     /// <param name="disp">The code's display text, or null when absent.</param>
     /// <param name="equiv">The code's plain-text stand-in.</param>
-    /// <param name="isTag"><see langword="true"/> when the returned text is an element name the caller must wrap in a tag of its own shape; <see langword="false"/> when it is text to append as-is.</param>
-    /// <returns>The resolved text or element name.</returns>
-    private static string RenderCodeText(InlineCodeType type, string? subType, OriginalData? originalData, string? disp, string equiv, out bool isTag)
+    /// <returns>The resolved text, and whether it is an element name the caller must wrap in a tag of its own shape rather than text to append as-is.</returns>
+    private static (string Text, bool IsTag) RenderCodeText(InlineCodeType type, string? subType, OriginalData? originalData, string? disp, string equiv)
     {
         if(originalData is not null)
         {
-            isTag = false;
-
-            return originalData.Text;
+            return (originalData.Text, false);
         }
 
         if(WellKnownInlineTokens.TryResolve(type, subType, originalData, out string name))
         {
-            isTag = true;
-
-            return name;
+            return (name, true);
         }
 
-        isTag = false;
-
-        return disp ?? EscapeMarkupText(equiv);
+        return (disp ?? EscapeMarkupText(equiv), false);
     }
 
     /// <summary>Escapes <c>&amp;</c>, <c>&lt;</c> and <c>&gt;</c> so a text run cannot be mistaken for markup inside an HTML fragment.</summary>
@@ -296,35 +266,21 @@ public sealed record InlineContent
         var escaped = new StringBuilder(text.Length);
         foreach(char character in text)
         {
-            switch(character)
+            string? replacement = character switch
             {
-                case '&':
-                {
-                    escaped.Append("&amp;");
+                '&' => "&amp;",
+                '<' => "&lt;",
+                '>' => "&gt;",
+                _ => null
+            };
 
-                    break;
-                }
-
-                case '<':
-                {
-                    escaped.Append("&lt;");
-
-                    break;
-                }
-
-                case '>':
-                {
-                    escaped.Append("&gt;");
-
-                    break;
-                }
-
-                default:
-                {
-                    escaped.Append(character);
-
-                    break;
-                }
+            if(replacement is null)
+            {
+                escaped.Append(character);
+            }
+            else
+            {
+                escaped.Append(replacement);
             }
         }
 

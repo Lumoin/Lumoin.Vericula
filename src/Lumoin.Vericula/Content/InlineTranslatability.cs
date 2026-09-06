@@ -35,69 +35,32 @@ public static class InlineTranslatability
         var text = new StringBuilder();
         foreach(InlinePart part in content.Parts)
         {
-            switch(part)
+            //The four content parts contribute their text or equiv only when the current nesting
+            //level is translatable; the two annotation parts never contribute text, only mutate the
+            //stack, so their arms fall through to the null default here.
+            string? contribution = part switch
             {
-                case InlineTextPart textPart:
-                {
-                    if(CurrentlyTranslatable(stack))
-                    {
-                        text.Append(textPart.Text);
-                    }
+                InlineTextPart textPart => textPart.Text,
+                PlaceholderPart placeholder => placeholder.Equiv,
+                StartCodePart startCode => startCode.Equiv,
+                EndCodePart endCode => endCode.Equiv,
+                _ => null
+            };
 
-                    break;
-                }
-
-                case PlaceholderPart placeholder:
-                {
-                    if(CurrentlyTranslatable(stack))
-                    {
-                        text.Append(placeholder.Equiv);
-                    }
-
-                    break;
-                }
-
-                case StartCodePart startCode:
-                {
-                    if(CurrentlyTranslatable(stack))
-                    {
-                        text.Append(startCode.Equiv);
-                    }
-
-                    break;
-                }
-
-                case EndCodePart endCode:
-                {
-                    if(CurrentlyTranslatable(stack))
-                    {
-                        text.Append(endCode.Equiv);
-                    }
-
-                    break;
-                }
-
-                case AnnotationStartPart annotationStart:
-                {
-                    bool effective = annotationStart.Translate ?? CurrentlyTranslatable(stack);
-                    stack = stack.Push(effective);
-
-                    break;
-                }
-
-                case AnnotationEndPart:
-                {
-                    //A close with nothing open (a malformed or cross-boundary split annotation) is
-                    //tolerated as a no-op rather than thrown from a text-only walk; the reader and
-                    //writer are where such mismatches are refused.
-                    if(!stack.IsEmpty)
-                    {
-                        stack = stack.Pop();
-                    }
-
-                    break;
-                }
+            if(contribution is not null && CurrentlyTranslatable(stack))
+            {
+                text.Append(contribution);
             }
+
+            //A close with nothing open (a malformed or cross-boundary split annotation) is tolerated
+            //as a no-op rather than thrown from a text-only walk; the reader and writer are where
+            //such mismatches are refused.
+            stack = part switch
+            {
+                AnnotationStartPart annotationStart => stack.Push(annotationStart.Translate ?? CurrentlyTranslatable(stack)),
+                AnnotationEndPart when !stack.IsEmpty => stack.Pop(),
+                _ => stack
+            };
         }
 
         return (text.ToString(), stack);

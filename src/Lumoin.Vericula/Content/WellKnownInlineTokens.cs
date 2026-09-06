@@ -8,7 +8,11 @@ namespace Lumoin.Vericula.Content;
 /// for when a code carries no <see cref="OriginalData"/> of its own, and the resolution that decides
 /// which name, if any, applies to a given code. The list is open: a code whose name this class does
 /// not know is still modelled and round-tripped in full; only tag synthesis and the linter's
-/// unresolvable-code warning consult it.
+/// unresolvable-code warning consult it. Unlike the reader's pair-form vocabularies, each name here
+/// has no per-name <c>Is*</c> predicate of its own: <see cref="TryResolve"/>'s original-data clue
+/// matches ordinal-case-insensitively against the whole of <see cref="ElementNames"/> at once, and
+/// <see cref="IsVoid(string)"/> compares against a fixed set of three, so a predicate per name would
+/// have no caller.
 /// </summary>
 public static class WellKnownInlineTokens
 {
@@ -166,39 +170,21 @@ public static class WellKnownInlineTokens
     {
         if(subType is not null)
         {
-            if(WellKnownXliffAttributeValues.IsSubTypeBold(subType))
+            (bool decided, bool resolved, string resolvedName) = subType switch
             {
-                name = B;
+                _ when WellKnownXliffAttributeValues.IsSubTypeBold(subType) => (true, true, B),
+                _ when WellKnownXliffAttributeValues.IsSubTypeItalic(subType) => (true, true, I),
+                _ when WellKnownXliffAttributeValues.IsSubTypeUnderline(subType) => (true, true, U),
+                _ when WellKnownXliffAttributeValues.IsSubTypeLineBreak(subType) => (true, true, Br),
+                _ when WellKnownXliffAttributeValues.IsSubTypePageBreak(subType) || WellKnownXliffAttributeValues.IsSubTypeVariable(subType) => (true, false, string.Empty),
+                _ => (false, false, string.Empty)
+            };
 
-                return true;
-            }
-
-            if(WellKnownXliffAttributeValues.IsSubTypeItalic(subType))
+            if(decided)
             {
-                name = I;
+                name = resolvedName;
 
-                return true;
-            }
-
-            if(WellKnownXliffAttributeValues.IsSubTypeUnderline(subType))
-            {
-                name = U;
-
-                return true;
-            }
-
-            if(WellKnownXliffAttributeValues.IsSubTypeLineBreak(subType))
-            {
-                name = Br;
-
-                return true;
-            }
-
-            if(WellKnownXliffAttributeValues.IsSubTypePageBreak(subType) || WellKnownXliffAttributeValues.IsSubTypeVariable(subType))
-            {
-                name = string.Empty;
-
-                return false;
+                return resolved;
             }
         }
 
@@ -207,36 +193,15 @@ public static class WellKnownInlineTokens
             return true;
         }
 
-        switch(type)
+        name = type switch
         {
-            case InlineCodeType.Link:
-            {
-                name = A;
+            InlineCodeType.Link => A,
+            InlineCodeType.Image => Img,
+            InlineCodeType.Quote => Q,
+            _ => string.Empty
+        };
 
-                return true;
-            }
-
-            case InlineCodeType.Image:
-            {
-                name = Img;
-
-                return true;
-            }
-
-            case InlineCodeType.Quote:
-            {
-                name = Q;
-
-                return true;
-            }
-
-            default:
-            {
-                name = string.Empty;
-
-                return false;
-            }
-        }
+        return name.Length != 0;
     }
 
     /// <summary>The element names this class knows, for the original-data resolution clue in <see cref="TryResolve"/>.</summary>

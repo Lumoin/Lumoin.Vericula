@@ -21,7 +21,7 @@ public sealed class WellKnownInlineTokensTests
             new("xlf:pb resolves false outright, not falling through to type", InlineCodeType.Link, "xlf:pb", null, false, null),
             new("xlf:var resolves false outright, not falling through to type", InlineCodeType.Image, "xlf:var", null, false, null),
             new("xlf:b wins over original data that would resolve differently", InlineCodeType.None, "xlf:b", "<i>", true, WellKnownInlineTokens.B),
-            //Named killer: WellKnownInlineTokens.cs TryResolve, the reserved-sub-type tier moved to
+            //Named killer: WellKnownInlineTokens.cs:169, TryResolve's reserved-sub-type tier moved to
             //run after the type-alone switch: a code whose type alone would resolve (Link to a) must
             //still prefer its reserved sub-type (xlf:b to b) over that type-alone fallback.
             new("xlf:b wins over a type that would otherwise resolve on its own", InlineCodeType.Link, "xlf:b", null, true, WellKnownInlineTokens.B),

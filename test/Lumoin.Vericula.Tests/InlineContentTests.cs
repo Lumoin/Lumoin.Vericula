@@ -62,6 +62,27 @@ public sealed class InlineContentTests
     }
 
     [TestMethod]
+    public void CreateThrowsForASequenceContainingANullPart()
+    {
+        Assert.ThrowsExactly<ArgumentException>(() => InlineContent.Create([new InlineTextPart("a"), null!]));
+    }
+
+    [TestMethod]
+    public void AnInlineTextPartRefusesAnEmptyString()
+    {
+        //Named killer: InlineTextPart.cs:28, ArgumentException.ThrowIfNullOrEmpty replaced with
+        //ArgumentNullException.ThrowIfNull, which would let an empty string through and let Create's
+        //"empty text dropped" normalization silently rely on an invariant nothing enforces.
+        Assert.ThrowsExactly<ArgumentException>(() => new InlineTextPart(string.Empty));
+    }
+
+    [TestMethod]
+    public void AnInlineTextPartRefusesANullString()
+    {
+        Assert.ThrowsExactly<ArgumentNullException>(() => new InlineTextPart(null!));
+    }
+
+    [TestMethod]
     public void FromTextOfAnEmptyStringReturnsEmpty()
     {
         Assert.AreEqual(InlineContent.Empty, InlineContent.FromText(string.Empty));
@@ -109,9 +130,20 @@ public sealed class InlineContentTests
     }
 
     [TestMethod]
-    public void HasCodesIsTrueWhenAStartOrEndCodeIsPresent()
+    public void HasCodesIsTrueWhenOnlyAStartCodeIsPresent()
     {
-        Assert.IsTrue(InlineContent.Create([StartCode("c1"), EndCode("c1")]).HasCodes);
+        //Named killer: InlineContent.cs:110, HasCodes's `PlaceholderPart or StartCodePart or
+        //EndCodePart` pattern with the StartCodePart arm dropped: a content holding only a start code
+        //(no matching end in this content) must still report HasCodes.
+        Assert.IsTrue(InlineContent.Create([StartCode("c1")]).HasCodes);
+    }
+
+    [TestMethod]
+    public void HasCodesIsTrueWhenOnlyAnEndCodeIsPresent()
+    {
+        //Named killer: InlineContent.cs:110, HasCodes's pattern with the EndCodePart arm dropped: a
+        //content holding only an end code (its start in an earlier segment) must still report HasCodes.
+        Assert.IsTrue(InlineContent.Create([EndCode("c1")]).HasCodes);
     }
 
     [TestMethod]
@@ -123,7 +155,7 @@ public sealed class InlineContentTests
     [TestMethod]
     public void TwoContentsBuiltSeparatelyFromTheSameTextAreEqual()
     {
-        //Named killer: InlineContent.cs, Equals(InlineContent?) reverted to the compiler-synthesized
+        //Named killer: InlineContent.cs:143, Equals(InlineContent?) reverted to the compiler-synthesized
         //record equality (dropping the SequenceEqual override). ImmutableArray<T>'s own equality
         //compares the backing array's reference, so two arrays built by two separate Create/FromText
         //calls would then compare unequal even though every element is equal by value, and this
@@ -160,20 +192,20 @@ public sealed class InlineContentTests
     [TestMethod]
     public void RenderMarkupOfTextOnlyContentIsVerbatimAndUnescaped()
     {
-        //Named killer: InlineContent.cs RenderMarkup, `escapeText = HasCodes` changed to `true`
+        //Named killer: InlineContent.cs:202, RenderMarkup's `escapeText = HasCodes` changed to `true`
         //unconditionally: a code-free content must render its ampersands and angle brackets verbatim,
         //since nothing downstream will ever tokenize it as HTML.
-        InlineContent content = InlineContent.FromText("Tom & Jerry <3");
+        InlineContent content = InlineContent.FromText("Salt & pepper <3");
 
-        Assert.AreEqual("Tom & Jerry <3", content.Render(InlineRendering.Markup));
+        Assert.AreEqual("Salt & pepper <3", content.Render(InlineRendering.Markup));
     }
 
     [TestMethod]
     public void RenderMarkupEscapesTextOnlyWhenTheContentHasCodes()
     {
-        InlineContent content = InlineContent.Create([new InlineTextPart("Tom & Jerry <3"), Placeholder("ph1")]);
+        InlineContent content = InlineContent.Create([new InlineTextPart("Salt & pepper <3"), Placeholder("ph1")]);
 
-        Assert.AreEqual("Tom &amp; Jerry &lt;3<br/>", content.Render(InlineRendering.Markup));
+        Assert.AreEqual("Salt &amp; pepper &lt;3<br/>", content.Render(InlineRendering.Markup));
     }
 
     [TestMethod]
@@ -214,7 +246,7 @@ public sealed class InlineContentTests
     [TestMethod]
     public void RenderMarkupPrefersASynthesizedTagOverDisp()
     {
-        //Named killer: InlineContent.cs RenderCodeText, the WellKnownInlineTokens.TryResolve check
+        //Named killer: InlineContent.cs:241, RenderCodeText's WellKnownInlineTokens.TryResolve check
         //moved to run after the `disp is not null` check: a code with both a resolvable sub-type and
         //a disp must still render its synthesized tag, not the disp text.
         var placeholder = new PlaceholderPart("ph1", InlineCodeType.Format, "xlf:lb", string.Empty, "a line break", null, null, true, true, ReorderHint.Yes, null, null);
@@ -230,6 +262,20 @@ public sealed class InlineContentTests
         InlineContent content = InlineContent.Create([placeholder]);
 
         Assert.AreEqual("shown to translator", content.Render(InlineRendering.Markup));
+    }
+
+    [TestMethod]
+    public void RenderMarkupRendersDispVerbatimEvenInsideAFragment()
+    {
+        //Pins design 5.2's disp fallback for the step-5 generator twin: the "(escaped like text)"
+        //parenthetical is read as attaching to equiv only, so a disp holding markup-sensitive
+        //characters renders unescaped even though the code renders as part of an HTML fragment
+        //(the placeholder itself makes HasCodes true). If the owner decides disp should be escaped
+        //too, this literal is the one to update alongside InlineContent.cs:253.
+        var placeholder = new PlaceholderPart("ph1", InlineCodeType.Other, null, "fallback", "A & B", null, null, true, true, ReorderHint.Yes, null, null);
+        InlineContent content = InlineContent.Create([placeholder]);
+
+        Assert.AreEqual("A & B", content.Render(InlineRendering.Markup));
     }
 
     [TestMethod]
@@ -252,9 +298,9 @@ public sealed class InlineContentTests
     [TestMethod]
     public void RenderPlainRendersTextVerbatimAndNeverEscapes()
     {
-        InlineContent content = InlineContent.Create([new InlineTextPart("Tom & Jerry <3"), Placeholder("ph1")]);
+        InlineContent content = InlineContent.Create([new InlineTextPart("Salt & pepper <3"), Placeholder("ph1")]);
 
-        Assert.AreEqual("Tom & Jerry <3", content.Render(InlineRendering.Plain));
+        Assert.AreEqual("Salt & pepper <3", content.Render(InlineRendering.Plain));
     }
 
     [TestMethod]
@@ -280,6 +326,29 @@ public sealed class InlineContentTests
         InlineContent content = InlineContent.FromText("Cancel");
 
         Assert.AreEqual("Cancel", content.TranslatableText);
+    }
+
+    [TestMethod]
+    public void TranslatableTextCountsACodesEquivOnlyWhereItIsTranslatable()
+    {
+        //Named killer: InlineTranslatability.cs:41-48, the PlaceholderPart/StartCodePart/EndCodePart
+        //arms of the contribution switch deleted (falling through to null): every other
+        //TranslatableText test uses text-only content, so a code's equiv never contributing would
+        //otherwise survive.
+        var placeholder = new PlaceholderPart("ph1", InlineCodeType.None, null, "{0}", null, null, null, true, true, ReorderHint.Yes, null, null);
+        InlineContent translatable = InlineContent.Create([new InlineTextPart("Send "), placeholder]);
+
+        Assert.AreEqual("Send {0}", translatable.TranslatableText);
+
+        InlineContent notTranslatable = InlineContent.Create(
+        [
+            new InlineTextPart("Send "),
+            AnnotationStart("m1", translate: false),
+            placeholder,
+            AnnotationEnd("m1")
+        ]);
+
+        Assert.AreEqual("Send ", notTranslatable.TranslatableText);
     }
 
     [TestMethod]
