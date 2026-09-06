@@ -1,0 +1,17 @@
+<Project Sdk="MSTest.Sdk">
+
+	<PropertyGroup>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<IsPackable>false</IsPackable>
+		<IsTestProject>true</IsTestProject>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\src\Lumoin.Vericula.SourceGenerators\Lumoin.Vericula.SourceGenerators.csproj" />
+	</ItemGroup>
+
+</Project>

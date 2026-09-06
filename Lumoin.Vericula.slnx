@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Lumoin.Vericula/Lumoin.Vericula.csproj" />
+    <Project Path="src/Lumoin.Vericula.MessageFormat/Lumoin.Vericula.MessageFormat.csproj" />
+    <Project Path="src/Lumoin.Vericula.SourceGenerators/Lumoin.Vericula.SourceGenerators.csproj" />
+    <Project Path="src/Lumoin.Vericula.Cli/Lumoin.Vericula.Cli.csproj" />
+  </Folder>
+  <Folder Name="/test/">
+    <Project Path="test/Lumoin.Vericula.Tests/Lumoin.Vericula.Tests.csproj" />
+    <Project Path="test/Lumoin.Vericula.MessageFormat.Tests/Lumoin.Vericula.MessageFormat.Tests.csproj" />
+    <Project Path="test/Lumoin.Vericula.SourceGenerators.Tests/Lumoin.Vericula.SourceGenerators.Tests.csproj" />
+    <Project Path="test/Lumoin.Vericula.Cli.Tests/Lumoin.Vericula.Cli.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,54 @@
+{
+  "version": 2,
+  "dependencies": {
+    "net10.0": {
+      "System.IO.Hashing": {
+        "type": "Transitive",
+        "resolved": "10.0.11",
+        "contentHash": "OzKDcIRkeNJeC8qAsbn8yJXnfTLP1dtkWILe+T56Gf/z+IkAASi7sMqLqJQat08j5z/mRN5xVtoAwbkMNMoBUQ=="
+      },
+      "System.Threading.RateLimiting": {
+        "type": "Transitive",
+        "resolved": "10.0.11",
+        "contentHash": "7+n9cNFpC7VIJzBwSyxs6DHNGLP330dJVeeOSdIJt4TiwwazyEvvRuhWLORT41mRxQVGKhiFIZ+In4JKFWS9Ig=="
+      },
+      "lumoin.vericula": {
+        "type": "Project",
+        "dependencies": {
+          "Lumoin.Base": "[0.0.12, )",
+          "Lumoin.Veritas.Core": "[0.0.1, )",
+          "Lumoin.Veritas.Turtle": "[0.0.1, )"
+        }
+      },
+      "Lumoin.Base": {
+        "type": "CentralTransitive",
+        "requested": "[0.0.12, )",
+        "resolved": "0.0.12",
+        "contentHash": "XA9cqzp/hU7UgaoIm9W/83JUiTTbeibFE6d9COdd8SNz2ftwX3rembmGvyIwVJJXgQ2mr1nDf/Yek5pl/JlJPA=="
+      },
+      "Lumoin.Veritas.Core": {
+        "type": "CentralTransitive",
+        "requested": "[0.0.1, )",
+        "resolved": "0.0.1",
+        "contentHash": "xgxmAtomuQa5jPmJtKYEtvTGh39mMoksX2uN23U2JbqMmuGUdK1uVQY/PsisXt50iZ/cZs4CTouIgMNOO4EBLQ==",
+        "dependencies": {
+          "Lumoin.Base": "0.0.9",
+          "System.IO.Hashing": "10.0.11",
+          "System.Threading.RateLimiting": "10.0.11"
+        }
+      },
+      "Lumoin.Veritas.Turtle": {
+        "type": "CentralTransitive",
+        "requested": "[0.0.1, )",
+        "resolved": "0.0.1",
+        "contentHash": "5SHiy3Pc27aUlaRHdoQnrieNbUBVADQOLvDYPSuL3IpFaWLbVcMV9RbfGPfMn1fdLGyJR2ngDwzeGABHMMmBOQ==",
+        "dependencies": {
+          "Lumoin.Base": "0.0.9",
+          "Lumoin.Veritas.Core": "0.0.1",
+          "System.IO.Hashing": "10.0.11",
+          "System.Threading.RateLimiting": "10.0.11"
+        }
+      }
+    }
+  }
+}

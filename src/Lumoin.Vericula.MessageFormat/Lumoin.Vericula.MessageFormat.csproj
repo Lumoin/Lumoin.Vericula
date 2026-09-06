@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Description>A standalone .NET implementation of the Unicode MessageFormat 2.0 data model, parser and evaluator for use with Lumoin.Vericula. Package metadata is inherited from Directory.Build.props.</Description>
+		<IsPackable>false</IsPackable>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Lumoin.Vericula\Lumoin.Vericula.csproj" />
+	</ItemGroup>
+
+</Project>

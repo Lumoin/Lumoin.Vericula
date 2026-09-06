@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<IsAotCompatible>true</IsAotCompatible>
+		<Description>The core Lumoin.Vericula library: the XLIFF 2.0 and 2.1 document model, reader and writer, linter, resx cooker and RDF/Turtle projection, with units, segments, glossaries, tone profiles and validation rules.</Description>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Lumoin.Base" />
+		<PackageReference Include="Lumoin.Veritas.Core" />
+		<PackageReference Include="Lumoin.Veritas.Turtle" />
+	</ItemGroup>
+
+</Project>

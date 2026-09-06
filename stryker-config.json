@@ -1,0 +1,19 @@
+{
+    "stryker-config":
+    {
+        "language-version": "preview",
+        "solution": "Lumoin.Vericula.slnx",
+        "test-projects": ["test/Lumoin.Vericula.Tests/Lumoin.Vericula.Tests.csproj"],
+        "mutation-level": "Standard",
+        "mutate": [
+            "**/*.cs",
+            "!**/WellKnown*.cs",
+            "!Text/Utf8Constants.cs"
+        ],
+        "ignore-methods": [
+            "*Log*",
+            "ToString",
+            "*HashCode*"
+        ]
+    }
+}

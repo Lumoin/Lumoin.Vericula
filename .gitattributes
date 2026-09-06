@@ -1,0 +1,47 @@
+# Normalise every text file to LF in the repository. The build matrix spans
+# ubuntu-latest, ubuntu-24.04-arm, windows-latest and macos-latest, so a file
+# committed with CRLF from a Windows checkout otherwise reaches the Linux legs
+# with stray carriage returns. The index is already uniformly LF, so this
+# codifies the status quo rather than renormalising anything.
+* text=auto eol=lf
+
+# Windows shells are the exception: cmd.exe mis-parses labels and goto targets
+# in a batch file that uses LF endings.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary assets: never line-ending-converted, never textually diffed or merged.
+# resources/lumoin-vericula-nuget-logo.png is packed into every NuGet package
+# (see Directory.Build.props), so corrupting it silently ships broken packages.
+#
+# These are deliberately NOT tracked by Git LFS. The repository's entire binary
+# payload is three files totalling ~130 KB, far below the size where LFS pays
+# for itself, and LFS would carry a real cost here: actions/checkout in
+# .github/workflows/main.yml does not set `lfs: true`, so an LFS-tracked icon
+# would arrive in CI as a ~130-byte pointer file and get embedded verbatim into
+# every published package. If genuinely large assets (fonts, video, datasets)
+# are added later, introduce LFS together with `lfs: true` on the checkout step.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.pdf binary
+*.zip binary
+*.snk binary
+*.pfx binary
+*.dll binary
+*.exe binary
+
+# Fonts are binary too. None are committed today; these rules mean the first one
+# added is handled correctly without anyone having to remember to do it.
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.eot binary
+
+# SVG is XML, so it stays text and stays diffable.
+*.svg text eol=lf

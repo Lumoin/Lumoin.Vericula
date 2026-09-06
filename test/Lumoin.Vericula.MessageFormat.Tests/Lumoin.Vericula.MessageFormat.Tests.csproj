@@ -1,0 +1,76 @@
+<Project Sdk="MSTest.Sdk">
+
+	<PropertyGroup>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<IsPackable>false</IsPackable>
+		<IsTestProject>true</IsTestProject>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\src\Lumoin.Vericula.MessageFormat\Lumoin.Vericula.MessageFormat.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Include="MessageFormatSuite\LDML48.2\LICENSE">
+			<LogicalName>LICENSE</LogicalName>
+		</EmbeddedResource>
+		<EmbeddedResource Include="MessageFormatSuite\LDML48.2\NOTICE.md">
+			<LogicalName>NOTICE.md</LogicalName>
+		</EmbeddedResource>
+		<EmbeddedResource Include="MessageFormatSuite\LDML48.2\README.md">
+			<LogicalName>README.md</LogicalName>
+		</EmbeddedResource>
+		<EmbeddedResource Include="MessageFormatSuite\LDML48.2\schemas\v0\tests.schema.json">
+			<LogicalName>schemas/v0/tests.schema.json</LogicalName>
+		</EmbeddedResource>
+		<EmbeddedResource Include="MessageFormatSuite\LDML48.2\tests\bidi.json">
+			<LogicalName>tests/bidi.json</LogicalName>
+		</EmbeddedResource>
+		<EmbeddedResource Include="MessageFormatSuite\LDML48.2\tests\data-model-errors.json">
+			<LogicalName>tests/data-model-errors.json</LogicalName>
+		</EmbeddedResource>
+		<EmbeddedResource Include="MessageFormatSuite\LDML48.2\tests\fallback.json">
+			<LogicalName>tests/fallback.json</LogicalName>
+		</EmbeddedResource>
+		<EmbeddedResource Include="MessageFormatSuite\LDML48.2\tests\pattern-selection.json">
+			<LogicalName>tests/pattern-selection.json</LogicalName>
+		</EmbeddedResource>
+		<EmbeddedResource Include="MessageFormatSuite\LDML48.2\tests\syntax-errors.json">
+			<LogicalName>tests/syntax-errors.json</LogicalName>
+		</EmbeddedResource>
+		<EmbeddedResource Include="MessageFormatSuite\LDML48.2\tests\syntax.json">
+			<LogicalName>tests/syntax.json</LogicalName>
+		</EmbeddedResource>
+		<EmbeddedResource Include="MessageFormatSuite\LDML48.2\tests\u-options.json">
+			<LogicalName>tests/u-options.json</LogicalName>
+		</EmbeddedResource>
+		<EmbeddedResource Include="MessageFormatSuite\LDML48.2\tests\functions\currency.json">
+			<LogicalName>tests/functions/currency.json</LogicalName>
+		</EmbeddedResource>
+		<EmbeddedResource Include="MessageFormatSuite\LDML48.2\tests\functions\date.json">
+			<LogicalName>tests/functions/date.json</LogicalName>
+		</EmbeddedResource>
+		<EmbeddedResource Include="MessageFormatSuite\LDML48.2\tests\functions\datetime.json">
+			<LogicalName>tests/functions/datetime.json</LogicalName>
+		</EmbeddedResource>
+		<EmbeddedResource Include="MessageFormatSuite\LDML48.2\tests\functions\integer.json">
+			<LogicalName>tests/functions/integer.json</LogicalName>
+		</EmbeddedResource>
+		<EmbeddedResource Include="MessageFormatSuite\LDML48.2\tests\functions\number.json">
+			<LogicalName>tests/functions/number.json</LogicalName>
+		</EmbeddedResource>
+		<EmbeddedResource Include="MessageFormatSuite\LDML48.2\tests\functions\offset.json">
+			<LogicalName>tests/functions/offset.json</LogicalName>
+		</EmbeddedResource>
+		<EmbeddedResource Include="MessageFormatSuite\LDML48.2\tests\functions\percent.json">
+			<LogicalName>tests/functions/percent.json</LogicalName>
+		</EmbeddedResource>
+		<EmbeddedResource Include="MessageFormatSuite\LDML48.2\tests\functions\string.json">
+			<LogicalName>tests/functions/string.json</LogicalName>
+		</EmbeddedResource>
+		<EmbeddedResource Include="MessageFormatSuite\LDML48.2\tests\functions\time.json">
+			<LogicalName>tests/functions/time.json</LogicalName>
+		</EmbeddedResource>
+	</ItemGroup>
+
+</Project>

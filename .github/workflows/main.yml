@@ -1,0 +1,270 @@
+name: Lumoin.Vericula .NET build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    paths-ignore:
+      - "**.md"
+  release:
+    types:
+      - published
+
+  schedule:
+    # A daily build to check all is still functioning.
+    - cron: "0 0 * * *"
+
+env:
+  DOTNET_ENVIRONMENT: CI
+  BUILD_CONFIGURATION: Release
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_NOLOGO: true
+  NUGET_XMLDOC_MODE: skip
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+  NUGET_FEED: https://api.nuget.org/v3/index.json
+  GITHUB_USER: ${{ github.repository_owner }}
+  GITHUB_FEED: https://nuget.pkg.github.com/lumoin/
+
+  # The shippable library NuGet packages, packed and uploaded in the canonical pack
+  # step below. Each carries a NuGet <Description> and packs by default. As the
+  # project grows, add the project name here. The Lumoin.Vericula.Cli application is
+  # NOT yet packaged here: making it a `dotnet tool` (PackAsTool) and adding a native
+  # AOT per-RID conformance leg — mirroring Lumoin.Veritas / Lumoin.Veridical — is a
+  # deferred follow-up ("extract first, modernize after").
+  LIBRARY_PROJECTS: >
+    Lumoin.Vericula
+    Lumoin.Vericula.SourceGenerators
+
+  # Endpoints harden-runner is permitted to reach: NuGet feed access, dotnet tool
+  # downloads, .NET SDK installation, Sigstore attestation, certificate revocation,
+  # and the standard api.github.com surface. Add to this list when adding actions
+  # or external dependencies.
+  COMMON_ALLOWED_ENDPOINTS: >
+    aka.ms:443
+    api.github.com:443
+    *.actions.githubusercontent.com:443
+    api.nuget.org:443
+    www.nuget.org:443
+    builds.dotnet.microsoft.com:443
+    ci.dot.net:443
+    pkgs.dev.azure.com:443
+    github.com:443
+    nuget.pkg.github.com:443
+    fulcio.sigstore.dev:443
+    rekor.sigstore.dev:443
+    cacerts.digicert.com:80
+    ts-crl.ws.symantec.com:80
+    crl3.digicert.com:80
+    crl4.digicert.com:80
+    s.symcb.com:80
+    ocsp.digicert.com:80
+    www.microsoft.com:80
+
+jobs:
+  build:
+    name: Build Lumoin.Vericula packages
+    permissions:
+      # Most legs need only contents:read. The ubuntu-latest leg additionally writes
+      # checks/pull-request comments (test summary) and produces signed artifact
+      # attestations via Sigstore (id-token, attestations). GitHub does not support
+      # per-matrix-leg permissions, so all legs carry the elevated set — the
+      # `if: matrix.os == 'ubuntu-latest'` step guards keep the elevated capabilities
+      # from being exercised on the other runners.
+      checks: write
+      pull-requests: write
+      id-token: write
+      attestations: write
+      contents: read
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+          - ubuntu-24.04-arm
+
+    steps:
+    - name: Harden Runner
+      if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm' }}
+      uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40
+      with:
+        disable-sudo: true
+        egress-policy: block
+        allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
+
+    - name: Checkout code
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+
+    - name: Set up .NET SDK
+      uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+      with:
+        cache: true
+        cache-dependency-path: '**/packages.lock.json'
+        global-json-file: global.json
+
+    - name: Install dependencies
+      run: dotnet restore --locked-mode
+
+    # Compute the package version once per leg. The rules mirror the Verifiable /
+    # Veritas / Veridical convention so consumers comparing the repositories see one
+    # version-numbering style:
+    #   release         -> "<tag>+<sha7>"        (e.g. 1.2.0+ab12cd3)
+    #   develop branch  -> "<tag>-develop.<run>+<sha7>"
+    #   anything else   -> "<tag>-build.<run>+<sha7>"
+    - name: Set NuGet package and suffix version
+      run: |
+        latestTag=$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.1)
+        latestTag="${latestTag#v}"
+        if [[ $GITHUB_EVENT_NAME == 'release' ]]; then
+          arrTag=(${GITHUB_REF//\// })
+          VERSION="${arrTag[2]}"
+          VERSION="${VERSION#v}"
+          echo "PACKAGE_VERSION=${VERSION}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "TAG_VERSION=${VERSION%%-*}" >> "$GITHUB_ENV"
+        elif [[ $GITHUB_REF == 'refs/heads/develop' ]]; then
+          echo "PACKAGE_VERSION=${latestTag}-develop.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "VERSION=${latestTag}-develop.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "TAG_VERSION=${latestTag%%-*}" >> "$GITHUB_ENV"
+        else
+          echo "PACKAGE_VERSION=${latestTag}-build.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "VERSION=${latestTag}-build.${GITHUB_RUN_ID}+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "TAG_VERSION=${latestTag%%-*}" >> "$GITHUB_ENV"
+        fi
+      shell: bash
+
+    # ContinuousIntegrationBuild flips SourceLink and deterministic-build behaviour on.
+    - name: Build
+      run: dotnet build Lumoin.Vericula.slnx --tl --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore --property:ContinuousIntegrationBuild=true --property:Version=${{ env.VERSION }} --property:InformationalVersion=${{ env.PACKAGE_VERSION }} --property:AssemblyVersion=${{ env.TAG_VERSION }} --property:FileVersion=${{ env.TAG_VERSION }}
+      timeout-minutes: 15
+
+    # All four test projects run through the solution. A TRX/coverage summary leg (as in
+    # Lumoin.Veritas) can be layered on later; for now the job gates on the exit code.
+    # No --tl here: global.json selects the Microsoft.Testing.Platform runner, which
+    # forwards unrecognised options to the test executable. It rejects --tl with
+    # "Unknown option", prints its help, and exits 5 without running a single test.
+    - name: Test
+      run: dotnet test Lumoin.Vericula.slnx --configuration ${{ env.BUILD_CONFIGURATION }} --no-build
+      timeout-minutes: 20
+
+    # Pack runs on ubuntu-latest only. The other legs prove the code builds and tests
+    # pass on x64 Windows, macOS, and ARM64 Linux — packing is canonical, one package
+    # per release rather than one per matrix leg.
+    - name: Pack library NuGet packages
+      if: ${{ matrix.os == 'ubuntu-latest' && github.repository_owner == 'lumoin' }}
+      run: |
+        for project in $LIBRARY_PROJECTS; do
+          path="src/$project/$project.csproj"
+          echo "Packing $path"
+          dotnet pack --verbosity normal \
+            --configuration "$BUILD_CONFIGURATION" \
+            --no-build \
+            --output nupkgs \
+            --property:PackageVersion="${PACKAGE_VERSION%%+*}" \
+            "$path"
+        done
+
+    # Sigstore artifact attestation needs the public-good Fulcio/Rekor transparency
+    # log, unavailable while the repository is private — the step errors with the
+    # current plan. Gated on repository visibility so it is skipped while private and
+    # turns on automatically once the repository is made public; no edit needed then.
+    - name: Generate artifact attestation
+      if: ${{ matrix.os == 'ubuntu-latest' && github.repository_owner == 'lumoin' && github.actor != 'dependabot[bot]' && github.event.repository.private == false }}
+      uses: lumoin/trusted-devsecops/.github/actions/sign-artifact@bd2b7f91e73d758f3126562d6a569fc0f31814ee
+      with:
+        subject-path: './nupkgs/*.nupkg'
+
+    - name: Upload library NuGet packages
+      if: ${{ matrix.os == 'ubuntu-latest' && github.repository_owner == 'lumoin' && github.actor != 'dependabot[bot]' }}
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: nupkg-libraries
+        path: ./nupkgs/*.*
+
+  # Pre-release goes to GitHub Packages on the develop branch. The release deploy goes
+  # to NuGet.org on tagged GitHub releases via NuGet trusted publishing (OIDC) — no
+  # API key needed beyond a registered nuget.org profile.
+  prerelease:
+    name: Create and upload Lumoin.Vericula pre-release packages to GitHub
+    permissions:
+      packages: write
+    needs: [ build ]
+    if: ${{ github.ref == 'refs/heads/develop' && github.repository_owner == 'lumoin' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40
+        with:
+          disable-sudo: true
+          egress-policy: block
+          allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
+
+      - name: Download NuGet packages
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: nupkg-*
+          merge-multiple: true
+          path: ./nupkgs
+
+      - name: Push packages to GitHub feed
+        run: |
+          for file in ./nupkgs/*.nupkg; do
+            dotnet nuget push "$file" --source "$GITHUB_FEED" --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate
+          done
+
+  deploy:
+    name: Create and upload Lumoin.Vericula release packages to NuGet.org
+    permissions:
+      packages: write
+      # id-token is required for NuGet trusted publishing (OIDC).
+      id-token: write
+    needs: [ build ]
+    if: ${{ github.event_name == 'release' && github.repository_owner == 'lumoin' }}
+    runs-on: ubuntu-latest
+    # Bind publishing to the "Release" deployment environment so the OIDC token carries the
+    # environment claim and deployments are recorded against it.
+    environment: Release
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40
+        with:
+          disable-sudo: true
+          egress-policy: block
+          allowed-endpoints: ${{ env.COMMON_ALLOWED_ENDPOINTS }}
+
+      - name: Download NuGet packages
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: nupkg-*
+          merge-multiple: true
+          path: ./nupkgs
+
+      - name: Push packages to GitHub feed
+        run: |
+          for file in ./nupkgs/*.nupkg; do
+            dotnet nuget push "$file" --source "$GITHUB_FEED" --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate
+          done
+
+      # NuGet trusted publishing: exchange the GitHub OIDC token for a short-lived API
+      # key. Requires the repository to be registered as a trusted publisher in the
+      # nuget.org profile owner's account (see secrets.NUGET_USER).
+      - name: NuGet trusted publishing login (OIDC)
+        id: nuget_login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Push packages to NuGet.org
+        run: |
+          for file in ./nupkgs/*.nupkg; do
+            dotnet nuget push "$file" --source "$NUGET_FEED" --api-key "${{ steps.nuget_login.outputs.NUGET_API_KEY }}" --skip-duplicate
+          done

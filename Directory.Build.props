@@ -1,0 +1,83 @@
+<Project>
+
+	<PropertyGroup>
+		<LangVersion>preview</LangVersion>
+    <TargetFramework>net10.0</TargetFramework>
+		<SourceRoot>$(MSBuildThisFileDirectory)</SourceRoot>
+		<Nullable>enable</Nullable>
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+		<NoWarn>$(NoWarn);1591;CA1711;CA2007;CA1716;CA2201;CA1725;CA1848</NoWarn>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<IncludeSymbols>true</IncludeSymbols>
+		<EmbedUntrackedSources>true</EmbedUntrackedSources>
+		<IncludePackageReferencesDuringMarkupCompilation>true</IncludePackageReferencesDuringMarkupCompilation>
+		<AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
+		<RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+
+		<NuGetAudit>true</NuGetAudit>
+		<NuGetAuditLevel>low</NuGetAuditLevel>
+	</PropertyGroup>
+
+	<!--
+		These files need not to be published and should not even,
+		since they would be placed into a same directory and their names
+		would clash.
+	-->
+	<ItemGroup>
+		<Content Remove="packages.lock.json"/>
+		<None Include="packages.lock.json">
+			<ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+			<CopyToPublishDirectory>Never</CopyToPublishDirectory>
+		</None>
+	</ItemGroup>
+
+	<!-- Common analysis levels.	-->
+	<PropertyGroup>
+		<AnalysisMode>Recommended</AnalysisMode>
+		<AnalysisModeGlobalization>None</AnalysisModeGlobalization>
+		<AnalysisModeSecurity>All</AnalysisModeSecurity>
+		<AnalysisModeReliability>All</AnalysisModeReliability>
+	</PropertyGroup>
+
+	<!--
+		Centralized NuGet package metadata, mirroring the Lumoin.Verisync / Veritas convention so the
+		family packs identically. Library projects inherit all of this and override only <Description>.
+		Symbols ship as snupkg; SourceLink is on via PublishRepositoryUrl + the SDK's built-in provider
+		(the CI build sets ContinuousIntegrationBuild=true for deterministic, source-linked output).
+		Versions are 0.0.0 locally and supplied by the CI build (.github/workflows/main.yml).
+	-->
+	<PropertyGroup>
+		<PackageId>$(AssemblyName)</PackageId>
+		<Authors>Lumoin and contributors</Authors>
+		<Company>Lumoin</Company>
+		<Product>Lumoin.Vericula</Product>
+		<Copyright>Lumoin</Copyright>
+		<Description>$(MSBuildProjectName) is part of Lumoin.Vericula, a .NET toolkit for XLIFF localisation and cultural rendering: reading XLIFF and cooking it into platform resources.</Description>
+		<PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<PackageIcon>resources/lumoin-vericula-nuget-logo.png</PackageIcon>
+		<PackageProjectUrl>https://github.com/Lumoin/Lumoin.Vericula</PackageProjectUrl>
+		<PackageReleaseNotes>https://github.com/Lumoin/Lumoin.Vericula/blob/main/CHANGELOG.md</PackageReleaseNotes>
+		<RepositoryUrl>https://github.com/Lumoin/Lumoin.Vericula</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<PublishRepositoryUrl>true</PublishRepositoryUrl>
+		<NeutralLanguage>en-US</NeutralLanguage>
+		<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
+		<EnablePackageValidation>true</EnablePackageValidation>
+		<RestoreUseStaticGraphEvaluation>true</RestoreUseStaticGraphEvaluation>
+
+		<Version>0.0.0</Version>
+		<PackageVersion>0.0.0</PackageVersion>
+		<AssemblyVersion>0.0.0</AssemblyVersion>
+		<FileVersion>0.0.0</FileVersion>
+		<InformationalVersion>0.0.0</InformationalVersion>
+	</PropertyGroup>
+
+	<!-- Pack the repository README and the NuGet logo into every packable (non-test) project. -->
+	<ItemGroup Condition="!$(MSBuildProjectName.EndsWith('.Tests'))">
+		<None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="/" Visible="false" />
+		<None Include="$(MSBuildThisFileDirectory)resources/lumoin-vericula-nuget-logo.png" Pack="true" PackagePath="/resources" Visible="false" />
+	</ItemGroup>
+
+</Project>

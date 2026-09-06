@@ -1,0 +1,13 @@
+<Project Sdk="MSTest.Sdk">
+
+	<PropertyGroup>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<IsPackable>false</IsPackable>
+		<IsTestProject>true</IsTestProject>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\src\Lumoin.Vericula.Cli\Lumoin.Vericula.Cli.csproj" />
+	</ItemGroup>
+
+</Project>
