@@ -1,4 +1,5 @@
 using System.Text;
+using Lumoin.Vericula.Content;
 using Lumoin.Vericula.Documents;
 using Lumoin.Vericula.Parsing;
 using Lumoin.Vericula.Units;
@@ -222,109 +223,125 @@ public sealed class XliffReaderTests
     }
 
     [TestMethod]
-    public void ThrowsOnUnsupportedInlineMarkup()
+    public void AcceptsAPlaceholderInSourceAndTarget()
     {
+        //Was ThrowsOnUnsupportedInlineMarkup: a <ph> used to be refused outright (r1-1 predates the
+        //inline content model); step 2 (5.3) parses it into a PlaceholderPart instead. Detailed
+        //per-element and per-attribute coverage lives in XliffReaderInlineContentTests.
         const string xliff = """
             <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en" trgLang="fi">
               <file id="wallet"><unit id="A"><segment><source>Hello <ph id="1"/></source><target>Hei <ph id="1"/></target></segment></unit></file>
             </xliff>
             """;
 
-        XliffFormatException exception = Assert.ThrowsExactly<XliffFormatException>(() => Read(xliff));
+        XliffUnit unit = Read(xliff).Files[0].Units.Single();
 
-        //XliffReader.cs:908, message => "": the message names the unsupported inline element and its
-        //enclosing element; without asserting on it, an emptied message would still pass.
-        Assert.Contains("Inline markup <ph> in <source> is not yet supported", exception.Message, StringComparison.Ordinal);
+        Assert.IsInstanceOfType<PlaceholderPart>(unit.Segments[0].SourceContent.Parts[1]);
+        Assert.IsInstanceOfType<PlaceholderPart>(unit.Segments[0].TargetContent!.Parts[1]);
     }
 
     [TestMethod]
-    public void ThrowsOnUnsupportedSpanningEndCodeMarkup()
+    public void AcceptsAnIsolatedEndCode()
     {
-        //Kills the mutant that drops <ec> (EndCode) from IsUnsupportedInlineMarkup: <ph> alone is
-        //covered by ThrowsOnUnsupportedInlineMarkup, so this proves the end-marker branch is checked too.
+        //Was ThrowsOnUnsupportedSpanningEndCodeMarkup: a standalone <ec> used to be refused outright
+        //because it carries no text; step 2 (5.3.2) accepts it when isolated="yes" names its own id.
         const string xliff = """
             <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en" trgLang="fi">
-              <file id="wallet"><unit id="A"><segment><source>Hello <ec id="1"/></source><target>Hei <ec id="1"/></target></segment></unit></file>
+              <file id="wallet"><unit id="A"><segment><source>Hello <ec id="1" isolated="yes"/></source><target>Hei <ec id="1" isolated="yes"/></target></segment></unit></file>
             </xliff>
             """;
 
-        Assert.ThrowsExactly<XliffFormatException>(() => Read(xliff));
+        XliffUnit unit = Read(xliff).Files[0].Units.Single();
+
+        Assert.IsInstanceOfType<EndCodePart>(unit.Segments[0].SourceContent.Parts[1]);
     }
 
     [TestMethod]
-    public void ThrowsOnCodePointMarkup()
+    public void AcceptsACodePointDecodedIntoTheText()
     {
-        //Kills the mutant that drops <cp> (CodePoint) from IsUnsupportedInlineMarkup: <ph> and <ec>
-        //are covered elsewhere, so this proves the code-point branch is checked too. XLIFF 2.1
-        //§4.2.3.2 cp: "Represents a Unicode code point that cannot be expressed in the encoding this
-        //XLIFF document is in."
+        //Was ThrowsOnCodePointMarkup. XLIFF 2.1 §4.2.3.1 cp: "Represents a Unicode character that is
+        //invalid in XML." Step 2 (5.3.1) decodes it into the text instead of refusing it.
         const string xliff = """
             <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en" trgLang="fi">
               <file id="wallet"><unit id="A"><segment><source>Hello <cp hex="A0"/> there</source></segment></unit></file>
             </xliff>
             """;
 
-        Assert.ThrowsExactly<XliffFormatException>(() => Read(xliff));
+        XliffUnit unit = Read(xliff).Files[0].Units.Single();
+
+        Assert.AreEqual("Hello   there", ((InlineTextPart)unit.Segments[0].SourceContent.Parts.Single()).Text);
     }
 
     [TestMethod]
-    public void ThrowsOnUnsupportedStartCodeMarkup()
+    public void AcceptsAnIsolatedStartCode()
     {
-        //Kills the mutant that drops <sc> (StartCode) from IsUnsupportedInlineMarkup: <ec> alone is
-        //covered by ThrowsOnUnsupportedSpanningEndCodeMarkup, so this proves the start-marker branch
-        //is checked too. XLIFF 2.1 §4.2.3.3 sc: "Represents the beginning of a spanning original code."
+        //Was ThrowsOnUnsupportedStartCodeMarkup: an unclosed <sc> used to be refused outright; step 2
+        //(5.3.2) accepts it when isolated="yes" says it has no matching <ec> in this unit.
         const string xliff = """
             <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en" trgLang="fi">
-              <file id="wallet"><unit id="A"><segment><source>Hello <sc id="1"/> there</source></segment></unit></file>
+              <file id="wallet"><unit id="A"><segment><source>Hello <sc id="1" isolated="yes"/> there</source></segment></unit></file>
             </xliff>
             """;
 
-        Assert.ThrowsExactly<XliffFormatException>(() => Read(xliff));
+        XliffUnit unit = Read(xliff).Files[0].Units.Single();
+
+        Assert.IsInstanceOfType<StartCodePart>(unit.Segments[0].SourceContent.Parts[1]);
     }
 
     [TestMethod]
-    public void ThrowsOnPairedCodeMarkup()
+    public void AcceptsAPairedCode()
     {
-        //r1-1: a <pc> spanning code used to be flattened to bare text, silently dropping its id,
-        //canDelete/canCopy/canReorder attributes and dataRef links to <originalData>. XLIFF 2.1 §4.2.3.3
-        //pc: "Represents a well-formed spanning original code." The reader must refuse it, not flatten it.
+        //Was ThrowsOnPairedCodeMarkup (r1-1): a <pc> used to be flattened to bare text, silently
+        //dropping its id and can* attributes; the reader refused it instead of flattening it. Step 2
+        //(5.3) now parses it into a StartCodePart/EndCodePart pair that keeps all of that.
         const string xliff = """
             <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en" trgLang="fi">
               <file id="wallet"><unit id="A"><segment><source>Click <pc id="1" canDelete="no">here</pc> now</source></segment></unit></file>
             </xliff>
             """;
 
-        Assert.ThrowsExactly<XliffFormatException>(() => Read(xliff));
+        XliffUnit unit = Read(xliff).Files[0].Units.Single();
+
+        var start = (StartCodePart)unit.Segments[0].SourceContent.Parts[1];
+        Assert.AreEqual("1", start.Id);
+        Assert.IsFalse(start.CanDelete);
     }
 
     [TestMethod]
-    public void ThrowsOnMrkAnnotationMarkup()
+    public void AcceptsAMrkAnnotationMarkingTranslateNo()
     {
-        //r1-2: a <mrk translate="no"> used to be flattened to its wrapped text, silently dropping the
-        //annotation that says the span must not be translated. XLIFF 2.1 §4.2.3.6 mrk: "Represents an
-        //annotation pertaining to the marked span."
+        //Was ThrowsOnMrkAnnotationMarkup (r1-2): a <mrk translate="no"> used to be flattened to its
+        //wrapped text, silently dropping the annotation; the reader refused it instead. Step 2 (5.3)
+        //now keeps the annotation as an AnnotationStartPart/AnnotationEndPart pair.
         const string xliff = """
             <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en" trgLang="fi">
               <file id="wallet"><unit id="A"><segment><source>Keep <mrk id="m1" translate="no">ACME</mrk> as is</source></segment></unit></file>
             </xliff>
             """;
 
-        Assert.ThrowsExactly<XliffFormatException>(() => Read(xliff));
+        XliffUnit unit = Read(xliff).Files[0].Units.Single();
+
+        var start = (AnnotationStartPart)unit.Segments[0].SourceContent.Parts[1];
+        Assert.AreEqual(false, start.Translate);
     }
 
     [TestMethod]
-    public void ThrowsOnStandaloneAnnotationMarkers()
+    public void AcceptsStandaloneAnnotationMarkers()
     {
-        //r1-2: standalone <sm>/<em> used to vanish silently since they carry no text, unlike <sc>/<ec>
-        //which were already refused. XLIFF 2.1 §4.2.3.7 sm: "Start marker of an annotation where the
-        //spanning marker cannot be used for wellformedness reasons."
+        //Was ThrowsOnStandaloneAnnotationMarkers (r1-2): standalone <sm>/<em> used to vanish silently
+        //since they carry no text; the reader refused them instead. Step 2 (5.3) parses the pair into
+        //an AnnotationStartPart/AnnotationEndPart with AnnotationForm.Split.
         const string xliff = """
             <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en" trgLang="fi">
               <file id="wallet"><unit id="A"><segment><source>A <sm id="m1" translate="no"/>B<em startRef="m1"/> C</source></segment></unit></file>
             </xliff>
             """;
 
-        Assert.ThrowsExactly<XliffFormatException>(() => Read(xliff));
+        XliffUnit unit = Read(xliff).Files[0].Units.Single();
+
+        InlineContent content = unit.Segments[0].SourceContent;
+        Assert.AreEqual(AnnotationForm.Split, ((AnnotationStartPart)content.Parts[1]).Form);
+        Assert.AreEqual(AnnotationForm.Split, ((AnnotationEndPart)content.Parts[3]).Form);
     }
 
     [TestMethod]

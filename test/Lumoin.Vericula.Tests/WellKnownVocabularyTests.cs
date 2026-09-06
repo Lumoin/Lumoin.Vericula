@@ -68,8 +68,9 @@ public sealed class WellKnownVocabularyTests
 
                 if(stringField is null || stringField.FieldType != typeof(string))
                 {
-                    //Composite or non-value predicates (for example IsUnsupportedInlineMarkup) have no
-                    //single field of their own to compare against and are out of scope for this check.
+                    //Composite or non-value predicates (for example IsSupportedNormalization, which
+                    //compares against three different values) have no single field of their own to
+                    //compare against and are out of scope for this check.
                     continue;
                 }
 

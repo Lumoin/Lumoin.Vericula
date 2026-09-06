@@ -37,14 +37,30 @@ namespace Lumoin.Vericula.Parsing;
 /// those of the groups enclosing it.
 /// </para>
 /// <para>
-/// What the reader does not accept, it refuses loudly rather than silently corrupting: inline codes
-/// that lose data when flattened, targets in a document that declares no target language, duplicate
-/// unit ids, unknown segment states, validation rules whose comparison semantics the linter cannot
-/// honour, and validation on groups or units. Metadata groups in categories the reader does not know
-/// are ignored; this is the one place where information from another tool is dropped.
+/// A segment's <c>&lt;source&gt;</c> and <c>&lt;target&gt;</c> content is parsed into the flat
+/// <see cref="InlineContent"/> part sequence described at XLIFF 2.1 §4.7 Inline Content and §4.2.3
+/// Inline Elements: text, <c>cp</c> code points decoded into it, <c>ph</c>/<c>sc</c>/<c>ec</c>/<c>pc</c>
+/// codes and <c>mrk</c>/<c>sm</c>/<c>em</c> annotations. Inline ids and open start codes and
+/// annotations are tracked once per unit per side (source, target), threaded across the unit's
+/// segments in document order, because a spanning code or a split annotation may cross a segment
+/// boundary; the streaming path shares the same parsing and state, since it materializes a whole
+/// <c>&lt;unit&gt;</c> element before parsing it. See <c>XliffReader.InlineContent.cs</c> for the
+/// content parser itself.
+/// </para>
+/// <para>
+/// What the reader does not accept, it refuses loudly rather than silently corrupting: inline content
+/// whose ids collide (outside the one case XLIFF allows, a target element reusing its corresponding
+/// source element's id), whose start and end codes or split annotations do not pair up on the same
+/// side, a foreign-namespace element inside inline content, an unsupported attribute on an inline
+/// element, a malformed or out-of-range <c>cp</c> code point, targets in a document that declares no
+/// target language, duplicate unit ids, unknown segment states, validation rules whose comparison
+/// semantics the linter cannot honour, and validation on groups or units. Metadata groups in
+/// categories the reader does not know are ignored, and a namespace-qualified attribute on an inline
+/// element is silently dropped; these are the only places where information the document carries is
+/// set aside rather than surfaced as an error.
 /// </para>
 /// </remarks>
-public static class XliffReader
+public static partial class XliffReader
 {
     /// <summary>The XLIFF 2.x core namespace, used to match root, file, group, unit and segment elements.</summary>
     private static readonly XNamespace Core = WellKnownXliffNamespaces.Core;
@@ -797,6 +813,17 @@ public static class XliffReader
         RejectValidation(unitElement, WellKnownXliffElements.Unit);
         Glossary? glossary = ParseGlossaryModule(unitElement, id);
 
+        //XLIFF 2.1 §4.2.2.5 unit places <originalData> before the segments, but the reader accepts it
+        //anywhere among the unit's children (5.3), so it is read up front, before any segment content
+        //that might reference it by dataRef.
+        ImmutableDictionary<string, OriginalData> data = ParseOriginalData(unitElement, id);
+
+        //§4.3.1.21 id: segment and ignorable ids share the same uniqueness scope as inline ids on
+        //their side, so both per-side states are seeded with them before any segment is parsed.
+        ImmutableHashSet<string> seededIds = CollectSegmentScopeIds(unitElement);
+        InlineParseState sourceState = InlineParseState.Seed(seededIds);
+        InlineParseState targetState = InlineParseState.Seed(seededIds);
+
         var segments = ImmutableArray.CreateBuilder<XliffSegment>();
         var segmentIds = new HashSet<string>(StringComparer.Ordinal);
         bool anyTranslatable = false;
@@ -805,7 +832,8 @@ public static class XliffReader
             bool coreChild = WellKnownXliffNamespaces.IsCore(child.Name.NamespaceName);
             if(coreChild && WellKnownXliffElements.IsSegment(child.Name.LocalName))
             {
-                XliffSegment segment = ParseSegment(child, id, SegmentKind.Translatable);
+                XliffSegment segment;
+                (segment, sourceState, targetState) = ParseSegment(child, id, SegmentKind.Translatable, sourceState, targetState, data);
                 RegisterSegmentId(segment.Id, id, segmentIds);
                 segments.Add(segment);
                 anyTranslatable = true;
@@ -815,7 +843,8 @@ public static class XliffReader
 
             if(coreChild && WellKnownXliffElements.IsIgnorable(child.Name.LocalName))
             {
-                XliffSegment segment = ParseSegment(child, id, SegmentKind.Ignorable);
+                XliffSegment segment;
+                (segment, sourceState, targetState) = ParseSegment(child, id, SegmentKind.Ignorable, sourceState, targetState, data);
                 RegisterSegmentId(segment.Id, id, segmentIds);
                 segments.Add(segment);
             }
@@ -825,6 +854,9 @@ public static class XliffReader
         {
             throw new XliffFormatException($"Unit '{id}' has no <segment> element; XLIFF 2.1 §4.2.2.5 requires a <unit> to contain at least one.");
         }
+
+        RequireEveryStartCodeClosedOrIsolated(sourceState, id, "source", unitElement);
+        RequireEveryStartCodeClosedOrIsolated(targetState, id, "target", unitElement);
 
         var notes = ImmutableArray.CreateBuilder<string>();
         XElement? notesElement = unitElement.Element(Core + WellKnownXliffElements.Notes);
@@ -866,9 +898,13 @@ public static class XliffReader
     /// <param name="element">The <c>&lt;segment&gt;</c> or <c>&lt;ignorable&gt;</c> element.</param>
     /// <param name="unitId">The enclosing unit's id, for error messages.</param>
     /// <param name="kind">Whether <paramref name="element"/> is a translatable segment or an ignorable one.</param>
-    /// <returns>The parsed segment.</returns>
+    /// <param name="sourceState">The unit's inline-content state for the source side, as it stood before this segment.</param>
+    /// <param name="targetState">The unit's inline-content state for the target side, as it stood before this segment.</param>
+    /// <param name="data">The unit's resolved <c>&lt;data&gt;</c> lookup (5.3), for the segment's codes to resolve their <c>dataRef</c> against.</param>
+    /// <returns>The parsed segment, and the source and target states as they stand after it (5.3.2: threaded forward to the next segment).</returns>
     /// <exception cref="XliffFormatException">If the element does not conform to what the reader accepts.</exception>
-    private static XliffSegment ParseSegment(XElement element, string unitId, SegmentKind kind)
+    private static (XliffSegment Segment, InlineParseState SourceState, InlineParseState TargetState) ParseSegment(
+        XElement element, string unitId, SegmentKind kind, InlineParseState sourceState, InlineParseState targetState, ImmutableDictionary<string, OriginalData> data)
     {
         XElement? sourceElement = element.Element(Core + WellKnownXliffElements.Source);
         if(sourceElement is null)
@@ -876,24 +912,43 @@ public static class XliffReader
             throw new XliffFormatException($"A <{element.Name.LocalName}> in unit '{unitId}' has no <source> element.");
         }
 
-        InlineContent sourceContent = InlineContent.FromText(ReadContent(sourceElement));
-        XElement? targetElement = element.Element(Core + WellKnownXliffElements.Target);
-        InlineContent? targetContent = targetElement is null ? null : InlineContent.FromText(ReadContent(targetElement));
-        string? id = OptionalId(element, element.Name.LocalName);
+        InlineParseContext sourceContext = new(IsTarget: false, ImmutableHashSet<string>.Empty, ImmutableHashSet<string>.Empty, data, unitId);
+        (InlineContent sourceContent, InlineParseState newSourceState) = ParseInlineContentRoot(sourceElement, sourceState, sourceContext);
 
+        //XLIFF 2.1 §4.3.1.21: the only ids a target element may reuse are those of its own sibling
+        //source element in this same segment; every id newly introduced while parsing that source is
+        //exactly the set this segment's target is allowed to repeat.
+        ImmutableHashSet<string> siblingSourceIds = newSourceState.Ids.Except(sourceState.Ids);
+
+        XElement? targetElement = element.Element(Core + WellKnownXliffElements.Target);
+        InlineContent? targetContent = null;
+        InlineParseState newTargetState = targetState;
+        if(targetElement is not null)
+        {
+            InlineParseContext targetContext = new(IsTarget: true, newSourceState.Ids, siblingSourceIds, data, unitId);
+            InlineContent parsedTarget;
+            (parsedTarget, newTargetState) = ParseInlineContentRoot(targetElement, targetState, targetContext);
+
+            //5.1: an empty <target></target> becomes a null TargetContent (untranslated), while an
+            //empty <source></source> stays InlineContent.Empty; the same parse produces both shapes,
+            //an empty result just means the element had no nodes to read.
+            targetContent = parsedTarget.IsEmpty ? null : parsedTarget;
+        }
+
+        string? id = OptionalId(element, element.Name.LocalName);
         if(kind == SegmentKind.Ignorable)
         {
-            return new XliffSegment(id, kind, sourceContent, targetContent, SegmentState.Initial, null);
+            return (new XliffSegment(id, kind, sourceContent, targetContent, SegmentState.Initial, null), newSourceState, newTargetState);
         }
 
-        SegmentState state = ParseState(element.Attribute(WellKnownXliffAttributes.State)?.Value, unitId);
+        SegmentState segmentState = ParseState(element.Attribute(WellKnownXliffAttributes.State)?.Value, unitId);
         string? subState = element.Attribute(WellKnownXliffAttributes.SubState)?.Value;
-        if(state == SegmentState.Initial && WellKnownVericulaMetadata.IsNeedsTranslationSubState(subState))
+        if(segmentState == SegmentState.Initial && WellKnownVericulaMetadata.IsNeedsTranslationSubState(subState))
         {
-            return new XliffSegment(id, kind, sourceContent, targetContent, SegmentState.NeedsTranslation, null);
+            return (new XliffSegment(id, kind, sourceContent, targetContent, SegmentState.NeedsTranslation, null), newSourceState, newTargetState);
         }
 
-        return new XliffSegment(id, kind, sourceContent, targetContent, state, subState);
+        return (new XliffSegment(id, kind, sourceContent, targetContent, segmentState, subState), newSourceState, newTargetState);
     }
 
     /// <summary>
@@ -916,27 +971,6 @@ public static class XliffReader
             _ when WellKnownXliffAttributeValues.IsStateFinal(value) => SegmentState.Final,
             _ => throw new XliffFormatException($"Unit '{unitId}' has a segment with the unknown state '{value}'.")
         };
-    }
-
-    /// <summary>
-    /// Reads the text of a source or target element, refusing every inline code and annotation marker:
-    /// <c>cp</c>, <c>ph</c>, <c>sc</c> and <c>ec</c> carry no text at all, and <c>pc</c>, <c>mrk</c>,
-    /// <c>sm</c> and <c>em</c> would flatten to their wrapped text while silently dropping the id,
-    /// dataRef links, translate flag and other attributes the model has no slot for (XLIFF 2.1 §4.7
-    /// Inline Elements and §4.7.2 Annotations).
-    /// </summary>
-    private static string ReadContent(XElement element)
-    {
-        foreach(XElement descendant in element.Descendants())
-        {
-            if(WellKnownXliffElements.IsUnsupportedInlineMarkup(descendant.Name.LocalName))
-            {
-                throw new XliffFormatException(
-                    $"Inline markup <{descendant.Name.LocalName}> in <{element.Name.LocalName}> is not yet supported; the reader reads plain text only.");
-            }
-        }
-
-        return element.Value;
     }
 
     /// <summary>

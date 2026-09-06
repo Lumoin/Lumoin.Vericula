@@ -6,7 +6,7 @@ namespace Lumoin.Vericula.Parsing;
 /// The well-known XLIFF 2.x element NAMES the reader and writer exchange, per
 /// <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html">XLIFF Version 2.1</see>:
 /// the core structure, the Metadata, Validation and Glossary module elements, and the inline codes
-/// and annotation markers the reader refuses.
+/// and annotation markers a segment's content is made of.
 /// </summary>
 /// <remarks>
 /// These are element names, not attribute names or values; attributes live in
@@ -138,49 +138,49 @@ public static class WellKnownXliffElements
     /// <summary>The UTF-8 source literal of <see cref="CodePoint"/>.</summary>
     public static ReadOnlySpan<byte> CodePointUtf8 => "cp"u8;
 
-    /// <summary>The inline code for a character the text cannot carry literally per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#cp">XLIFF 2.1, cp</see>; the reader refuses it because flattening loses the character.</summary>
+    /// <summary>The inline code for a character the source text cannot carry literally per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#cp">XLIFF 2.1, cp</see>; the reader decodes its <c>hex</c> value into the text (5.3.1).</summary>
     public static readonly string CodePoint = Utf8Constants.ToInternedString(CodePointUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Placeholder"/>.</summary>
     public static ReadOnlySpan<byte> PlaceholderUtf8 => "ph"u8;
 
-    /// <summary>The standalone placeholder code per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#ph">XLIFF 2.1, ph</see>; the reader refuses it because it carries no text.</summary>
+    /// <summary>The standalone placeholder code per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#ph">XLIFF 2.1, ph</see>; the reader parses it into a <see cref="Content.PlaceholderPart"/>.</summary>
     public static readonly string Placeholder = Utf8Constants.ToInternedString(PlaceholderUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="StartCode"/>.</summary>
     public static ReadOnlySpan<byte> StartCodeUtf8 => "sc"u8;
 
-    /// <summary>The start marker of a spanning code per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#sc">XLIFF 2.1, sc</see>; the reader refuses it because it carries no text.</summary>
+    /// <summary>The start marker of a spanning code per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#sc">XLIFF 2.1, sc</see>; the reader parses it into a <see cref="Content.StartCodePart"/> and opens it for a later <see cref="EndCode"/> on the same side.</summary>
     public static readonly string StartCode = Utf8Constants.ToInternedString(StartCodeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="EndCode"/>.</summary>
     public static ReadOnlySpan<byte> EndCodeUtf8 => "ec"u8;
 
-    /// <summary>The end marker of a spanning code per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#ec">XLIFF 2.1, ec</see>; the reader refuses it because it carries no text.</summary>
+    /// <summary>The end marker of a spanning code per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#ec">XLIFF 2.1, ec</see>; the reader parses it into an <see cref="Content.EndCodePart"/> and closes the <see cref="StartCode"/> its <c>startRef</c> names.</summary>
     public static readonly string EndCode = Utf8Constants.ToInternedString(EndCodeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="PairedCode"/>.</summary>
     public static ReadOnlySpan<byte> PairedCodeUtf8 => "pc"u8;
 
-    /// <summary>A well-formed spanning original code per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#pc">XLIFF 2.1, pc</see>; the reader refuses it because flattening drops its id, dataRef links to &lt;originalData&gt; and can* attributes.</summary>
+    /// <summary>A well-formed spanning original code per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#pc">XLIFF 2.1, pc</see>; the reader parses it into a <see cref="Content.StartCodePart"/>, its children, and a <see cref="Content.EndCodePart"/>, mapping its shared and half-specific attributes per table 2 (XLIFF 2.1 §4.7.2.2).</summary>
     public static readonly string PairedCode = Utf8Constants.ToInternedString(PairedCodeUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="Marker"/>.</summary>
     public static ReadOnlySpan<byte> MarkerUtf8 => "mrk"u8;
 
-    /// <summary>A spanning annotation marker per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#mrk">XLIFF 2.1, mrk</see>; the reader refuses it because flattening drops its id, translate, type and value attributes.</summary>
+    /// <summary>A spanning annotation marker per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#mrk">XLIFF 2.1, mrk</see>; the reader parses it into a <see cref="Content.AnnotationStartPart"/>, its children, and a <see cref="Content.AnnotationEndPart"/>.</summary>
     public static readonly string Marker = Utf8Constants.ToInternedString(MarkerUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="StartMarker"/>.</summary>
     public static ReadOnlySpan<byte> StartMarkerUtf8 => "sm"u8;
 
-    /// <summary>The start marker of an annotation the spanning form cannot express per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#sm">XLIFF 2.1, sm</see>; the reader refuses it because it carries no text.</summary>
+    /// <summary>The start marker of an annotation the spanning form cannot express per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#sm">XLIFF 2.1, sm</see>; the reader parses it into a <see cref="Content.AnnotationStartPart"/> and opens it for a later <see cref="EndMarker"/> on the same side.</summary>
     public static readonly string StartMarker = Utf8Constants.ToInternedString(StartMarkerUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="EndMarker"/>.</summary>
     public static ReadOnlySpan<byte> EndMarkerUtf8 => "em"u8;
 
-    /// <summary>The end marker of an annotation the spanning form cannot express per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#em">XLIFF 2.1, em</see>; the reader refuses it because it carries no text.</summary>
+    /// <summary>The end marker of an annotation the spanning form cannot express per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#em">XLIFF 2.1, em</see>; the reader parses it into a <see cref="Content.AnnotationEndPart"/> and closes the <see cref="StartMarker"/> its <c>startRef</c> names.</summary>
     public static readonly string EndMarker = Utf8Constants.ToInternedString(EndMarkerUtf8);
 
     /// <summary>The UTF-8 source literal of <see cref="OriginalData"/>.</summary>
@@ -230,22 +230,53 @@ public static class WellKnownXliffElements
     /// <returns><see langword="true"/> if the element is a Validation module container; otherwise, <see langword="false"/>.</returns>
     public static bool IsValidation(string localName) => string.Equals(localName, Validation, StringComparison.Ordinal);
 
-    /// <summary>
-    /// Determines if an element's local name is one of the inline codes or annotation markers the
-    /// reader refuses because flattening to text would lose information it carries only in attributes
-    /// or in a nested structure the model has no slot for: <see cref="CodePoint"/>,
-    /// <see cref="Placeholder"/>, <see cref="StartCode"/>, <see cref="EndCode"/>,
-    /// <see cref="PairedCode"/>, <see cref="Marker"/>, <see cref="StartMarker"/> or
-    /// <see cref="EndMarker"/>.
-    /// </summary>
+    /// <summary>Determines if an element's local name is <see cref="CodePoint"/>.</summary>
     /// <param name="localName">The element's local name.</param>
-    /// <returns><see langword="true"/> if flattening the element to text would lose data; otherwise, <see langword="false"/>.</returns>
-    public static bool IsUnsupportedInlineMarkup(string localName) => string.Equals(localName, CodePoint, StringComparison.Ordinal)
-        || string.Equals(localName, Placeholder, StringComparison.Ordinal)
-        || string.Equals(localName, StartCode, StringComparison.Ordinal)
-        || string.Equals(localName, EndCode, StringComparison.Ordinal)
-        || string.Equals(localName, PairedCode, StringComparison.Ordinal)
-        || string.Equals(localName, Marker, StringComparison.Ordinal)
-        || string.Equals(localName, StartMarker, StringComparison.Ordinal)
-        || string.Equals(localName, EndMarker, StringComparison.Ordinal);
+    /// <returns><see langword="true"/> if the element is a code point; otherwise, <see langword="false"/>.</returns>
+    public static bool IsCodePoint(string localName) => string.Equals(localName, CodePoint, StringComparison.Ordinal);
+
+    /// <summary>Determines if an element's local name is <see cref="Placeholder"/>.</summary>
+    /// <param name="localName">The element's local name.</param>
+    /// <returns><see langword="true"/> if the element is a standalone placeholder code; otherwise, <see langword="false"/>.</returns>
+    public static bool IsPlaceholder(string localName) => string.Equals(localName, Placeholder, StringComparison.Ordinal);
+
+    /// <summary>Determines if an element's local name is <see cref="StartCode"/>.</summary>
+    /// <param name="localName">The element's local name.</param>
+    /// <returns><see langword="true"/> if the element is a spanning code's start marker; otherwise, <see langword="false"/>.</returns>
+    public static bool IsStartCode(string localName) => string.Equals(localName, StartCode, StringComparison.Ordinal);
+
+    /// <summary>Determines if an element's local name is <see cref="EndCode"/>.</summary>
+    /// <param name="localName">The element's local name.</param>
+    /// <returns><see langword="true"/> if the element is a spanning code's end marker; otherwise, <see langword="false"/>.</returns>
+    public static bool IsEndCode(string localName) => string.Equals(localName, EndCode, StringComparison.Ordinal);
+
+    /// <summary>Determines if an element's local name is <see cref="PairedCode"/>.</summary>
+    /// <param name="localName">The element's local name.</param>
+    /// <returns><see langword="true"/> if the element is a well-formed spanning code; otherwise, <see langword="false"/>.</returns>
+    public static bool IsPairedCode(string localName) => string.Equals(localName, PairedCode, StringComparison.Ordinal);
+
+    /// <summary>Determines if an element's local name is <see cref="Marker"/>.</summary>
+    /// <param name="localName">The element's local name.</param>
+    /// <returns><see langword="true"/> if the element is a wrapping annotation marker; otherwise, <see langword="false"/>.</returns>
+    public static bool IsMarker(string localName) => string.Equals(localName, Marker, StringComparison.Ordinal);
+
+    /// <summary>Determines if an element's local name is <see cref="StartMarker"/>.</summary>
+    /// <param name="localName">The element's local name.</param>
+    /// <returns><see langword="true"/> if the element is a split annotation's start marker; otherwise, <see langword="false"/>.</returns>
+    public static bool IsStartMarker(string localName) => string.Equals(localName, StartMarker, StringComparison.Ordinal);
+
+    /// <summary>Determines if an element's local name is <see cref="EndMarker"/>.</summary>
+    /// <param name="localName">The element's local name.</param>
+    /// <returns><see langword="true"/> if the element is a split annotation's end marker; otherwise, <see langword="false"/>.</returns>
+    public static bool IsEndMarker(string localName) => string.Equals(localName, EndMarker, StringComparison.Ordinal);
+
+    /// <summary>Determines if an element's local name is <see cref="OriginalData"/>.</summary>
+    /// <param name="localName">The element's local name.</param>
+    /// <returns><see langword="true"/> if the element is a unit's original-data container; otherwise, <see langword="false"/>.</returns>
+    public static bool IsOriginalData(string localName) => string.Equals(localName, OriginalData, StringComparison.Ordinal);
+
+    /// <summary>Determines if an element's local name is <see cref="Data"/>.</summary>
+    /// <param name="localName">The element's local name.</param>
+    /// <returns><see langword="true"/> if the element is one original-data entry; otherwise, <see langword="false"/>.</returns>
+    public static bool IsData(string localName) => string.Equals(localName, Data, StringComparison.Ordinal);
 }
