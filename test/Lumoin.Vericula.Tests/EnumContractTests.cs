@@ -12,7 +12,7 @@ namespace Lumoin.Vericula.Tests;
 public sealed partial class EnumContractTests
 {
     /// <summary>The number of enum types, public and private (including nested), the core assembly is expected to declare.</summary>
-    private const int ExpectedCoreEnumCount = 11;
+    private const int ExpectedCoreEnumCount = 17;
 
     /// <summary>
     /// Walks every enum type in the core assembly, public or private, and asserts its members carry

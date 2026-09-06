@@ -151,4 +151,213 @@ public static class WellKnownXliffAttributeValues
     /// <param name="value">The attribute value.</param>
     /// <returns><see langword="true"/> if the value is final; otherwise, <see langword="false"/>.</returns>
     public static bool IsStateFinal(string? value) => string.Equals(value, StateFinal, StringComparison.Ordinal);
+
+    /// <summary>The UTF-8 source literal of <see cref="FirstNo"/>.</summary>
+    public static ReadOnlySpan<byte> FirstNoUtf8 => "firstNo"u8;
+
+    /// <summary>The <c>canReorder</c> value forbidding the code from being the first reordered item per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#canReorder">XLIFF 2.1, canReorder</see>.</summary>
+    public static readonly string FirstNo = Utf8Constants.ToInternedString(FirstNoUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Fmt"/>.</summary>
+    public static ReadOnlySpan<byte> FmtUtf8 => "fmt"u8;
+
+    /// <summary>The <c>type</c> value for data formatting markup per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#type">XLIFF 2.1, type</see>.</summary>
+    public static readonly string Fmt = Utf8Constants.ToInternedString(FmtUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Ui"/>.</summary>
+    public static ReadOnlySpan<byte> UiUtf8 => "ui"u8;
+
+    /// <summary>The <c>type</c> value for user-interface markup per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#type">XLIFF 2.1, type</see>.</summary>
+    public static readonly string Ui = Utf8Constants.ToInternedString(UiUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Quote"/>.</summary>
+    public static ReadOnlySpan<byte> QuoteUtf8 => "quote"u8;
+
+    /// <summary>The <c>type</c> value for quotation markup per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#type">XLIFF 2.1, type</see>.</summary>
+    public static readonly string Quote = Utf8Constants.ToInternedString(QuoteUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Link"/>.</summary>
+    public static ReadOnlySpan<byte> LinkUtf8 => "link"u8;
+
+    /// <summary>The <c>type</c> value for a hyperlink per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#type">XLIFF 2.1, type</see>.</summary>
+    public static readonly string Link = Utf8Constants.ToInternedString(LinkUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Image"/>.</summary>
+    public static ReadOnlySpan<byte> ImageUtf8 => "image"u8;
+
+    /// <summary>The <c>type</c> value for an image per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#type">XLIFF 2.1, type</see>.</summary>
+    public static readonly string Image = Utf8Constants.ToInternedString(ImageUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Other"/>.</summary>
+    public static ReadOnlySpan<byte> OtherUtf8 => "other"u8;
+
+    /// <summary>The <c>type</c> value for original markup none of the other reserved values name per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#type">XLIFF 2.1, type</see>.</summary>
+    public static readonly string Other = Utf8Constants.ToInternedString(OtherUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Generic"/>.</summary>
+    public static ReadOnlySpan<byte> GenericUtf8 => "generic"u8;
+
+    /// <summary>The default <c>type</c> value of an annotation per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#mrk">XLIFF 2.1, mrk</see>.</summary>
+    public static readonly string Generic = Utf8Constants.ToInternedString(GenericUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Term"/>.</summary>
+    public static ReadOnlySpan<byte> TermUtf8 => "term"u8;
+
+    /// <summary>The annotation <c>type</c> value marking a terminology entry per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#mrk">XLIFF 2.1, mrk</see>.</summary>
+    public static readonly string Term = Utf8Constants.ToInternedString(TermUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Comment"/>.</summary>
+    public static ReadOnlySpan<byte> CommentUtf8 => "comment"u8;
+
+    /// <summary>The annotation <c>type</c> value marking a reviewer comment per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#mrk">XLIFF 2.1, mrk</see>.</summary>
+    public static readonly string Comment = Utf8Constants.ToInternedString(CommentUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Ltr"/>.</summary>
+    public static ReadOnlySpan<byte> LtrUtf8 => "ltr"u8;
+
+    /// <summary>The left-to-right value of a <c>dir</c> attribute per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#dir">XLIFF 2.1, dir</see>.</summary>
+    public static readonly string Ltr = Utf8Constants.ToInternedString(LtrUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Rtl"/>.</summary>
+    public static ReadOnlySpan<byte> RtlUtf8 => "rtl"u8;
+
+    /// <summary>The right-to-left value of a <c>dir</c> attribute per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#dir">XLIFF 2.1, dir</see>.</summary>
+    public static readonly string Rtl = Utf8Constants.ToInternedString(RtlUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Auto"/>.</summary>
+    public static ReadOnlySpan<byte> AutoUtf8 => "auto"u8;
+
+    /// <summary>The Unicode-bidirectional-algorithm value of a <c>dir</c> attribute per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#dir">XLIFF 2.1, dir</see>; also <c>data</c>'s own default (XLIFF 2.1 §4.3.1.12).</summary>
+    public static readonly string Auto = Utf8Constants.ToInternedString(AutoUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="SubTypeBold"/>.</summary>
+    public static ReadOnlySpan<byte> SubTypeBoldUtf8 => "xlf:b"u8;
+
+    /// <summary>The reserved <c>subType</c> value synthesizing an HTML <c>&lt;b&gt;</c> element, per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#subType">XLIFF 2.1, subType</see>; requires <c>type="fmt"</c>.</summary>
+    public static readonly string SubTypeBold = Utf8Constants.ToInternedString(SubTypeBoldUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="SubTypeItalic"/>.</summary>
+    public static ReadOnlySpan<byte> SubTypeItalicUtf8 => "xlf:i"u8;
+
+    /// <summary>The reserved <c>subType</c> value synthesizing an HTML <c>&lt;i&gt;</c> element; requires <c>type="fmt"</c>.</summary>
+    public static readonly string SubTypeItalic = Utf8Constants.ToInternedString(SubTypeItalicUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="SubTypeUnderline"/>.</summary>
+    public static ReadOnlySpan<byte> SubTypeUnderlineUtf8 => "xlf:u"u8;
+
+    /// <summary>The reserved <c>subType</c> value synthesizing an HTML <c>&lt;u&gt;</c> element; requires <c>type="fmt"</c>.</summary>
+    public static readonly string SubTypeUnderline = Utf8Constants.ToInternedString(SubTypeUnderlineUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="SubTypeLineBreak"/>.</summary>
+    public static ReadOnlySpan<byte> SubTypeLineBreakUtf8 => "xlf:lb"u8;
+
+    /// <summary>The reserved <c>subType</c> value synthesizing an HTML <c>&lt;br/&gt;</c> element; requires <c>type="fmt"</c>.</summary>
+    public static readonly string SubTypeLineBreak = Utf8Constants.ToInternedString(SubTypeLineBreakUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="SubTypePageBreak"/>.</summary>
+    public static ReadOnlySpan<byte> SubTypePageBreakUtf8 => "xlf:pb"u8;
+
+    /// <summary>The reserved <c>subType</c> value for a page break, which has no HTML element; requires <c>type="fmt"</c>.</summary>
+    public static readonly string SubTypePageBreak = Utf8Constants.ToInternedString(SubTypePageBreakUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="SubTypeVariable"/>.</summary>
+    public static ReadOnlySpan<byte> SubTypeVariableUtf8 => "xlf:var"u8;
+
+    /// <summary>The reserved <c>subType</c> value for a user-interface variable, which has no HTML element; requires <c>type="ui"</c>.</summary>
+    public static readonly string SubTypeVariable = Utf8Constants.ToInternedString(SubTypeVariableUtf8);
+
+    /// <summary>Determines if a <c>canReorder</c> attribute value is <see cref="FirstNo"/>.</summary>
+    /// <param name="value">The attribute value, or null when the attribute is absent.</param>
+    /// <returns><see langword="true"/> if the value is firstNo; otherwise, <see langword="false"/>.</returns>
+    public static bool IsFirstNo(string? value) => string.Equals(value, FirstNo, StringComparison.Ordinal);
+
+    /// <summary>Determines if a <c>type</c> attribute value is <see cref="Fmt"/>.</summary>
+    /// <param name="value">The attribute value, or null when the attribute is absent.</param>
+    /// <returns><see langword="true"/> if the value is fmt; otherwise, <see langword="false"/>.</returns>
+    public static bool IsFmt(string? value) => string.Equals(value, Fmt, StringComparison.Ordinal);
+
+    /// <summary>Determines if a <c>type</c> attribute value is <see cref="Ui"/>.</summary>
+    /// <param name="value">The attribute value, or null when the attribute is absent.</param>
+    /// <returns><see langword="true"/> if the value is ui; otherwise, <see langword="false"/>.</returns>
+    public static bool IsUi(string? value) => string.Equals(value, Ui, StringComparison.Ordinal);
+
+    /// <summary>Determines if a <c>type</c> attribute value is <see cref="Quote"/>.</summary>
+    /// <param name="value">The attribute value, or null when the attribute is absent.</param>
+    /// <returns><see langword="true"/> if the value is quote; otherwise, <see langword="false"/>.</returns>
+    public static bool IsQuote(string? value) => string.Equals(value, Quote, StringComparison.Ordinal);
+
+    /// <summary>Determines if a <c>type</c> attribute value is <see cref="Link"/>.</summary>
+    /// <param name="value">The attribute value, or null when the attribute is absent.</param>
+    /// <returns><see langword="true"/> if the value is link; otherwise, <see langword="false"/>.</returns>
+    public static bool IsLink(string? value) => string.Equals(value, Link, StringComparison.Ordinal);
+
+    /// <summary>Determines if a <c>type</c> attribute value is <see cref="Image"/>.</summary>
+    /// <param name="value">The attribute value, or null when the attribute is absent.</param>
+    /// <returns><see langword="true"/> if the value is image; otherwise, <see langword="false"/>.</returns>
+    public static bool IsImage(string? value) => string.Equals(value, Image, StringComparison.Ordinal);
+
+    /// <summary>Determines if a <c>type</c> attribute value is <see cref="Other"/>.</summary>
+    /// <param name="value">The attribute value, or null when the attribute is absent.</param>
+    /// <returns><see langword="true"/> if the value is other; otherwise, <see langword="false"/>.</returns>
+    public static bool IsOther(string? value) => string.Equals(value, Other, StringComparison.Ordinal);
+
+    /// <summary>Determines if an annotation's <c>type</c> attribute value is <see cref="Generic"/>.</summary>
+    /// <param name="value">The attribute value.</param>
+    /// <returns><see langword="true"/> if the value is generic; otherwise, <see langword="false"/>.</returns>
+    public static bool IsGeneric(string? value) => string.Equals(value, Generic, StringComparison.Ordinal);
+
+    /// <summary>Determines if an annotation's <c>type</c> attribute value is <see cref="Term"/>.</summary>
+    /// <param name="value">The attribute value.</param>
+    /// <returns><see langword="true"/> if the value is term; otherwise, <see langword="false"/>.</returns>
+    public static bool IsTerm(string? value) => string.Equals(value, Term, StringComparison.Ordinal);
+
+    /// <summary>Determines if an annotation's <c>type</c> attribute value is <see cref="Comment"/>.</summary>
+    /// <param name="value">The attribute value.</param>
+    /// <returns><see langword="true"/> if the value is comment; otherwise, <see langword="false"/>.</returns>
+    public static bool IsComment(string? value) => string.Equals(value, Comment, StringComparison.Ordinal);
+
+    /// <summary>Determines if a <c>dir</c> attribute value is <see cref="Ltr"/>.</summary>
+    /// <param name="value">The attribute value, or null when the attribute is absent.</param>
+    /// <returns><see langword="true"/> if the value is ltr; otherwise, <see langword="false"/>.</returns>
+    public static bool IsLtr(string? value) => string.Equals(value, Ltr, StringComparison.Ordinal);
+
+    /// <summary>Determines if a <c>dir</c> attribute value is <see cref="Rtl"/>.</summary>
+    /// <param name="value">The attribute value, or null when the attribute is absent.</param>
+    /// <returns><see langword="true"/> if the value is rtl; otherwise, <see langword="false"/>.</returns>
+    public static bool IsRtl(string? value) => string.Equals(value, Rtl, StringComparison.Ordinal);
+
+    /// <summary>Determines if a <c>dir</c> attribute value is <see cref="Auto"/>.</summary>
+    /// <param name="value">The attribute value, or null when the attribute is absent.</param>
+    /// <returns><see langword="true"/> if the value is auto; otherwise, <see langword="false"/>.</returns>
+    public static bool IsAuto(string? value) => string.Equals(value, Auto, StringComparison.Ordinal);
+
+    /// <summary>Determines if a <c>subType</c> attribute value is <see cref="SubTypeBold"/>.</summary>
+    /// <param name="value">The attribute value, or null when the attribute is absent.</param>
+    /// <returns><see langword="true"/> if the value is xlf:b; otherwise, <see langword="false"/>.</returns>
+    public static bool IsSubTypeBold(string? value) => string.Equals(value, SubTypeBold, StringComparison.Ordinal);
+
+    /// <summary>Determines if a <c>subType</c> attribute value is <see cref="SubTypeItalic"/>.</summary>
+    /// <param name="value">The attribute value, or null when the attribute is absent.</param>
+    /// <returns><see langword="true"/> if the value is xlf:i; otherwise, <see langword="false"/>.</returns>
+    public static bool IsSubTypeItalic(string? value) => string.Equals(value, SubTypeItalic, StringComparison.Ordinal);
+
+    /// <summary>Determines if a <c>subType</c> attribute value is <see cref="SubTypeUnderline"/>.</summary>
+    /// <param name="value">The attribute value, or null when the attribute is absent.</param>
+    /// <returns><see langword="true"/> if the value is xlf:u; otherwise, <see langword="false"/>.</returns>
+    public static bool IsSubTypeUnderline(string? value) => string.Equals(value, SubTypeUnderline, StringComparison.Ordinal);
+
+    /// <summary>Determines if a <c>subType</c> attribute value is <see cref="SubTypeLineBreak"/>.</summary>
+    /// <param name="value">The attribute value, or null when the attribute is absent.</param>
+    /// <returns><see langword="true"/> if the value is xlf:lb; otherwise, <see langword="false"/>.</returns>
+    public static bool IsSubTypeLineBreak(string? value) => string.Equals(value, SubTypeLineBreak, StringComparison.Ordinal);
+
+    /// <summary>Determines if a <c>subType</c> attribute value is <see cref="SubTypePageBreak"/>.</summary>
+    /// <param name="value">The attribute value, or null when the attribute is absent.</param>
+    /// <returns><see langword="true"/> if the value is xlf:pb; otherwise, <see langword="false"/>.</returns>
+    public static bool IsSubTypePageBreak(string? value) => string.Equals(value, SubTypePageBreak, StringComparison.Ordinal);
+
+    /// <summary>Determines if a <c>subType</c> attribute value is <see cref="SubTypeVariable"/>.</summary>
+    /// <param name="value">The attribute value, or null when the attribute is absent.</param>
+    /// <returns><see langword="true"/> if the value is xlf:var; otherwise, <see langword="false"/>.</returns>
+    public static bool IsSubTypeVariable(string? value) => string.Equals(value, SubTypeVariable, StringComparison.Ordinal);
 }

@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Lumoin.Vericula.Content;
 using Lumoin.Vericula.Documents;
 using Lumoin.Vericula.Glossaries;
 using Lumoin.Vericula.Linting;
@@ -545,8 +546,8 @@ public sealed class LinterTests
         var unit = new XliffUnit(
             "A",
             [
-                new XliffSegment("s1", SegmentKind.Translatable, "x", "A", SegmentState.Final, null),
-                new XliffSegment("s2", SegmentKind.Translatable, "y", "B", SegmentState.Final, null)
+                new XliffSegment("s1", SegmentKind.Translatable, InlineContent.FromText("x"), InlineContent.FromText("A"), SegmentState.Final, null),
+                new XliffSegment("s2", SegmentKind.Translatable, InlineContent.FromText("y"), InlineContent.FromText("B"), SegmentState.Final, null)
             ],
             ImmutableArray<string>.Empty,
             ImmutableArray<Scope>.Empty,

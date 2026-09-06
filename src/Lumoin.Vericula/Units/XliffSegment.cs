@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Lumoin.Vericula.Content;
 
 namespace Lumoin.Vericula.Units;
 
@@ -13,8 +14,8 @@ namespace Lumoin.Vericula.Units;
 /// </remarks>
 /// <param name="Id">The segment's identifier, unique within its file, or null when it has none.</param>
 /// <param name="Kind">Whether the segment is translatable or ignorable.</param>
-/// <param name="Source">The source text of the segment.</param>
-/// <param name="Target">The target text of the segment, or null when it has not been translated.</param>
+/// <param name="SourceContent">The segment's source content.</param>
+/// <param name="TargetContent">The segment's target content, or null when it has not been translated.</param>
 /// <param name="State">The translation lifecycle state of the segment.</param>
 /// <param name="SubState">
 /// A tool-specific refinement of <see cref="State"/> in the XLIFF form <c>prefix:value</c>, or null.
@@ -25,7 +26,14 @@ namespace Lumoin.Vericula.Units;
 public sealed record XliffSegment(
     string? Id,
     SegmentKind Kind,
-    string Source,
-    string? Target,
+    InlineContent SourceContent,
+    InlineContent? TargetContent,
     SegmentState State,
-    string? SubState);
+    string? SubState)
+{
+    /// <summary>The Markup rendering of <see cref="SourceContent"/> (see <see cref="InlineRendering"/>).</summary>
+    public string Source => SourceContent.Render(InlineRendering.Markup);
+
+    /// <summary>The Markup rendering of <see cref="TargetContent"/> (see <see cref="InlineRendering"/>), or null when the segment has not been translated.</summary>
+    public string? Target => TargetContent?.Render(InlineRendering.Markup);
+}

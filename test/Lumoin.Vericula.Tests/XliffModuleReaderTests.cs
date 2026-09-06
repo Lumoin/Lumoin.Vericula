@@ -1,5 +1,6 @@
 using System.IO.Pipelines;
 using System.Text;
+using Lumoin.Vericula.Content;
 using Lumoin.Vericula.Documents;
 using Lumoin.Vericula.Glossaries;
 using Lumoin.Vericula.Parsing;
@@ -757,12 +758,12 @@ public sealed class XliffModuleReaderTests
         XliffSegment[] segments = Read(xliff).Files[0].Units[0].Segments.ToArray();
 
         Assert.HasCount(6, segments);
-        Assert.AreEqual(new XliffSegment("s1", SegmentKind.Translatable, "First.", "Eka.", SegmentState.Translated, "tool:draft"), segments[0]);
-        Assert.AreEqual(new XliffSegment("i1", SegmentKind.Ignorable, " ", " ", SegmentState.Initial, null), segments[1]);
-        Assert.AreEqual(new XliffSegment("s2", SegmentKind.Translatable, "Second.", "Toka.", SegmentState.Reviewed, null), segments[2]);
-        Assert.AreEqual(new XliffSegment(null, SegmentKind.Translatable, "Third.", "Kolmas.", SegmentState.Final, null), segments[3]);
-        Assert.AreEqual(new XliffSegment(null, SegmentKind.Translatable, "Fourth.", null, SegmentState.NeedsTranslation, null), segments[4]);
-        Assert.AreEqual(new XliffSegment(null, SegmentKind.Translatable, "Fifth.", null, SegmentState.Initial, null), segments[5]);
+        Assert.AreEqual(new XliffSegment("s1", SegmentKind.Translatable, InlineContent.FromText("First."), InlineContent.FromText("Eka."), SegmentState.Translated, "tool:draft"), segments[0]);
+        Assert.AreEqual(new XliffSegment("i1", SegmentKind.Ignorable, InlineContent.FromText(" "), InlineContent.FromText(" "), SegmentState.Initial, null), segments[1]);
+        Assert.AreEqual(new XliffSegment("s2", SegmentKind.Translatable, InlineContent.FromText("Second."), InlineContent.FromText("Toka."), SegmentState.Reviewed, null), segments[2]);
+        Assert.AreEqual(new XliffSegment(null, SegmentKind.Translatable, InlineContent.FromText("Third."), InlineContent.FromText("Kolmas."), SegmentState.Final, null), segments[3]);
+        Assert.AreEqual(new XliffSegment(null, SegmentKind.Translatable, InlineContent.FromText("Fourth."), null, SegmentState.NeedsTranslation, null), segments[4]);
+        Assert.AreEqual(new XliffSegment(null, SegmentKind.Translatable, InlineContent.FromText("Fifth."), null, SegmentState.Initial, null), segments[5]);
     }
 
     [TestMethod]

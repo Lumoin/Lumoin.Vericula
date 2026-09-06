@@ -183,6 +183,18 @@ public static class WellKnownXliffElements
     /// <summary>The end marker of an annotation the spanning form cannot express per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#em">XLIFF 2.1, em</see>; the reader refuses it because it carries no text.</summary>
     public static readonly string EndMarker = Utf8Constants.ToInternedString(EndMarkerUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="OriginalData"/>.</summary>
+    public static ReadOnlySpan<byte> OriginalDataUtf8 => "originalData"u8;
+
+    /// <summary>The container of a unit's <c>data</c> entries per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#originalData">XLIFF 2.1, originalData</see>.</summary>
+    public static readonly string OriginalData = Utf8Constants.ToInternedString(OriginalDataUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Data"/>.</summary>
+    public static ReadOnlySpan<byte> DataUtf8 => "data"u8;
+
+    /// <summary>One original-data entry a code refers to by id per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#data">XLIFF 2.1, data</see>.</summary>
+    public static readonly string Data = Utf8Constants.ToInternedString(DataUtf8);
+
     /// <summary>Determines if an element's local name is <see cref="Xliff"/>.</summary>
     /// <param name="localName">The element's local name.</param>
     /// <returns><see langword="true"/> if the element is the root; otherwise, <see langword="false"/>.</returns>

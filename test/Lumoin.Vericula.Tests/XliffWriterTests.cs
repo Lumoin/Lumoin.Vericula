@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.IO.Pipelines;
 using System.Text;
 using System.Xml.Linq;
+using Lumoin.Vericula.Content;
 using Lumoin.Vericula.Documents;
 using Lumoin.Vericula.Glossaries;
 using Lumoin.Vericula.Parsing;
@@ -132,13 +133,13 @@ public sealed class XliffWriterTests
         var unit = new XliffUnit(
             "A",
             [
-                new XliffSegment("s1", SegmentKind.Translatable, "First.", "Eka.", SegmentState.Translated, "tool:draft"),
-                new XliffSegment("i1", SegmentKind.Ignorable, " ", " ", SegmentState.Initial, null),
-                new XliffSegment("s2", SegmentKind.Translatable, "Second.", "Toka.", SegmentState.Reviewed, null),
-                new XliffSegment(null, SegmentKind.Translatable, "Third.", "Kolmas.", SegmentState.Final, null),
-                new XliffSegment(null, SegmentKind.Translatable, "Fourth.", null, SegmentState.NeedsTranslation, null),
-                new XliffSegment(null, SegmentKind.Translatable, "Fifth.", null, SegmentState.Initial, null),
-                new XliffSegment(null, SegmentKind.Translatable, "Sixth.", null, SegmentState.Initial, "tool:x")
+                new XliffSegment("s1", SegmentKind.Translatable, InlineContent.FromText("First."), InlineContent.FromText("Eka."), SegmentState.Translated, "tool:draft"),
+                new XliffSegment("i1", SegmentKind.Ignorable, InlineContent.FromText(" "), InlineContent.FromText(" "), SegmentState.Initial, null),
+                new XliffSegment("s2", SegmentKind.Translatable, InlineContent.FromText("Second."), InlineContent.FromText("Toka."), SegmentState.Reviewed, null),
+                new XliffSegment(null, SegmentKind.Translatable, InlineContent.FromText("Third."), InlineContent.FromText("Kolmas."), SegmentState.Final, null),
+                new XliffSegment(null, SegmentKind.Translatable, InlineContent.FromText("Fourth."), null, SegmentState.NeedsTranslation, null),
+                new XliffSegment(null, SegmentKind.Translatable, InlineContent.FromText("Fifth."), null, SegmentState.Initial, null),
+                new XliffSegment(null, SegmentKind.Translatable, InlineContent.FromText("Sixth."), null, SegmentState.Initial, "tool:x")
             ],
             ImmutableArray<string>.Empty,
             ImmutableArray<Scope>.Empty,
@@ -383,7 +384,7 @@ public sealed class XliffWriterTests
         //still be refused even though it is not empty.
         var unit = new XliffUnit(
             "A",
-            [new XliffSegment(null, SegmentKind.Ignorable, " ", null, SegmentState.Initial, null)],
+            [new XliffSegment(null, SegmentKind.Ignorable, InlineContent.FromText(" "), null, SegmentState.Initial, null)],
             ImmutableArray<string>.Empty,
             ImmutableArray<Scope>.Empty,
             ImmutableDictionary<string, string>.Empty,
@@ -400,8 +401,8 @@ public sealed class XliffWriterTests
         var unit = new XliffUnit(
             "A",
             [
-                new XliffSegment("s1", SegmentKind.Translatable, "One", null, SegmentState.Initial, null),
-                new XliffSegment("s1", SegmentKind.Translatable, "Two", null, SegmentState.Initial, null)
+                new XliffSegment("s1", SegmentKind.Translatable, InlineContent.FromText("One"), null, SegmentState.Initial, null),
+                new XliffSegment("s1", SegmentKind.Translatable, InlineContent.FromText("Two"), null, SegmentState.Initial, null)
             ],
             ImmutableArray<string>.Empty,
             ImmutableArray<Scope>.Empty,
@@ -507,7 +508,7 @@ public sealed class XliffWriterTests
         //throw ArgumentOutOfRangeException instead of reporting the problem through Problems().
         XliffUnit unit = XliffUnit.FromText("A", "Home") with
         {
-            Segments = [new XliffSegment(null, SegmentKind.Translatable, "Home", null, (SegmentState)99, null)]
+            Segments = [new XliffSegment(null, SegmentKind.Translatable, InlineContent.FromText("Home"), null, (SegmentState)99, null)]
         };
 
         AssertRejected(new XliffDocument(XliffVersion.V20, [NewFile("wallet", "en", null, [], [unit])]), "not a known segment state");
@@ -520,7 +521,7 @@ public sealed class XliffWriterTests
         //subState attribute, so a model value the writer cannot express must be refused, not dropped.
         var unit = new XliffUnit(
             "A",
-            [new XliffSegment("i1", SegmentKind.Ignorable, " ", " ", SegmentState.Translated, "tool:x")],
+            [new XliffSegment("i1", SegmentKind.Ignorable, InlineContent.FromText(" "), InlineContent.FromText(" "), SegmentState.Translated, "tool:x")],
             ImmutableArray<string>.Empty,
             ImmutableArray<Scope>.Empty,
             ImmutableDictionary<string, string>.Empty,
@@ -538,7 +539,7 @@ public sealed class XliffWriterTests
         //that sub-state silently discarded and no diagnostic. The writer must refuse it instead.
         var unit = new XliffUnit(
             "A",
-            [new XliffSegment("s1", SegmentKind.Translatable, "Home", null, SegmentState.NeedsTranslation, "acme:source-changed")],
+            [new XliffSegment("s1", SegmentKind.Translatable, InlineContent.FromText("Home"), null, SegmentState.NeedsTranslation, "acme:source-changed")],
             ImmutableArray<string>.Empty,
             ImmutableArray<Scope>.Empty,
             ImmutableDictionary<string, string>.Empty,
@@ -751,7 +752,7 @@ public sealed class XliffWriterTests
         //its own.
         var unit = new XliffUnit(
             "A",
-            [new XliffSegment("s 1", SegmentKind.Translatable, "Home", null, SegmentState.Initial, null)],
+            [new XliffSegment("s 1", SegmentKind.Translatable, InlineContent.FromText("Home"), null, SegmentState.Initial, null)],
             ImmutableArray<string>.Empty,
             ImmutableArray<Scope>.Empty,
             ImmutableDictionary<string, string>.Empty,
@@ -1348,7 +1349,7 @@ public sealed class XliffWriterTests
         //the original.
         var unit = new XliffUnit(
             "A",
-            [new XliffSegment(null, SegmentKind.Translatable, "Home", null, SegmentState.Translated, "bad\u0001substate")],
+            [new XliffSegment(null, SegmentKind.Translatable, InlineContent.FromText("Home"), null, SegmentState.Translated, "bad\u0001substate")],
             ImmutableArray<string>.Empty,
             ImmutableArray<Scope>.Empty,
             ImmutableDictionary<string, string>.Empty,
@@ -1365,7 +1366,7 @@ public sealed class XliffWriterTests
         //in segment.SubState that XML cannot carry would reach the output unchecked.
         var unit = new XliffUnit(
             "A",
-            [new XliffSegment(null, SegmentKind.Translatable, "Home", null, SegmentState.Translated, "bad\u0001sub")],
+            [new XliffSegment(null, SegmentKind.Translatable, InlineContent.FromText("Home"), null, SegmentState.Translated, "bad\u0001sub")],
             ImmutableArray<string>.Empty,
             ImmutableArray<Scope>.Empty,
             ImmutableDictionary<string, string>.Empty,
@@ -1384,8 +1385,8 @@ public sealed class XliffWriterTests
         var unit = new XliffUnit(
             "A",
             [
-                new XliffSegment("s1", SegmentKind.Translatable, "Home", null, SegmentState.Initial, null),
-                new XliffSegment("i1", SegmentKind.Ignorable, " ", null, SegmentState.Initial, "tool:x")
+                new XliffSegment("s1", SegmentKind.Translatable, InlineContent.FromText("Home"), null, SegmentState.Initial, null),
+                new XliffSegment("i1", SegmentKind.Ignorable, InlineContent.FromText(" "), null, SegmentState.Initial, "tool:x")
             ],
             ImmutableArray<string>.Empty,
             ImmutableArray<Scope>.Empty,

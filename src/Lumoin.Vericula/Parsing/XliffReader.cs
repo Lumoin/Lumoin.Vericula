@@ -4,6 +4,7 @@ using System.IO.Pipelines;
 using System.Runtime.CompilerServices;
 using System.Xml;
 using System.Xml.Linq;
+using Lumoin.Vericula.Content;
 using Lumoin.Vericula.Documents;
 using Lumoin.Vericula.Glossaries;
 using Lumoin.Vericula.Scopes;
@@ -875,24 +876,24 @@ public static class XliffReader
             throw new XliffFormatException($"A <{element.Name.LocalName}> in unit '{unitId}' has no <source> element.");
         }
 
-        string source = ReadContent(sourceElement);
+        InlineContent sourceContent = InlineContent.FromText(ReadContent(sourceElement));
         XElement? targetElement = element.Element(Core + WellKnownXliffElements.Target);
-        string? target = targetElement is null ? null : ReadContent(targetElement);
+        InlineContent? targetContent = targetElement is null ? null : InlineContent.FromText(ReadContent(targetElement));
         string? id = OptionalId(element, element.Name.LocalName);
 
         if(kind == SegmentKind.Ignorable)
         {
-            return new XliffSegment(id, kind, source, target, SegmentState.Initial, null);
+            return new XliffSegment(id, kind, sourceContent, targetContent, SegmentState.Initial, null);
         }
 
         SegmentState state = ParseState(element.Attribute(WellKnownXliffAttributes.State)?.Value, unitId);
         string? subState = element.Attribute(WellKnownXliffAttributes.SubState)?.Value;
         if(state == SegmentState.Initial && WellKnownVericulaMetadata.IsNeedsTranslationSubState(subState))
         {
-            return new XliffSegment(id, kind, source, target, SegmentState.NeedsTranslation, null);
+            return new XliffSegment(id, kind, sourceContent, targetContent, SegmentState.NeedsTranslation, null);
         }
 
-        return new XliffSegment(id, kind, source, target, state, subState);
+        return new XliffSegment(id, kind, sourceContent, targetContent, state, subState);
     }
 
     /// <summary>
