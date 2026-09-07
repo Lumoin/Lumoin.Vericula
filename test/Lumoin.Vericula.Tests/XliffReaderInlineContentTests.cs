@@ -15,8 +15,6 @@ namespace Lumoin.Vericula.Tests;
 [TestClass]
 public sealed class XliffReaderInlineContentTests
 {
-    public TestContext TestContext { get; set; } = null!;
-
     /// <summary>Wraps one unit body (its children, typically <c>&lt;segment&gt;</c>/<c>&lt;originalData&gt;</c> elements) in a minimal document.</summary>
     private static string Wrap(string unitBody) =>
         $"""<xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en" trgLang="fi"><file id="f"><unit id="u">{unitBody}</unit></file></xliff>""";
@@ -36,8 +34,6 @@ public sealed class XliffReaderInlineContentTests
 
         return Assert.ThrowsExactly<XliffFormatException>(() => XliffReader.Read(stream));
     }
-
-    // ---- ph -----------------------------------------------------------------------------------
 
     [TestMethod]
     public void ReadsAPlaceholderWithItsAttributeDefaults()
@@ -110,8 +106,6 @@ public sealed class XliffReaderInlineContentTests
         var placeholder = (PlaceholderPart)unit.Segments[0].SourceContent.Parts[0];
         Assert.AreEqual("1", placeholder.Id);
     }
-
-    // ---- pc, sc/ec, and the attribute mapping table between them -------------------------------
 
     [TestMethod]
     public void ReadsAPairedCodeIntoAStartPartItsChildAndAnEndPart()
@@ -248,6 +242,57 @@ public sealed class XliffReaderInlineContentTests
     }
 
     [TestMethod]
+    public void ReadsAnEndCodeWithItsAttributeDefaults()
+    {
+        //Named killer: XliffReader.InlineContent.cs (AppendEndCode), the standalone <ec>'s canOverlap
+        //default `true` changed to `false` (unlike ph/pc, no earlier test asserted this default for ec).
+        XliffUnit unit = ReadUnit("""<segment><source><sc id="1"/>x<ec startRef="1"/></source></segment>""");
+
+        var end = (EndCodePart)unit.Segments[0].SourceContent.Parts[2];
+        Assert.AreEqual("1", end.StartRef);
+        Assert.IsNull(end.Id);
+        Assert.AreEqual(InlineCodeType.None, end.Type);
+        Assert.IsNull(end.SubType);
+        Assert.AreEqual(string.Empty, end.Equiv);
+        Assert.IsNull(end.Disp);
+        Assert.IsNull(end.DataRef);
+        Assert.IsNull(end.OriginalData);
+        Assert.IsTrue(end.CanCopy);
+        Assert.IsTrue(end.CanDelete);
+        Assert.IsTrue(end.CanOverlap);
+        Assert.AreEqual(ReorderHint.Yes, end.CanReorder);
+        Assert.IsNull(end.CopyOf);
+        Assert.IsNull(end.SubFlows);
+        Assert.IsFalse(end.Isolated);
+        Assert.AreEqual(TextDirection.Inherited, end.Direction);
+        Assert.AreEqual(SpanForm.Split, end.Form);
+    }
+
+    [TestMethod]
+    public void ReadsAnEndCodeWithEveryAttributeSet()
+    {
+        XliffUnit unit = ReadUnit("""
+            <originalData><data id="d1">&lt;/b&gt;</data></originalData>
+            <segment><source><sc id="1"/>x<ec startRef="1" type="fmt" subType="xlf:b" equiv="[/b]" disp="&lt;/b&gt;" dataRef="d1" canCopy="no" canDelete="no" canOverlap="no" canReorder="firstNo" copyOf="0" subFlows="u2" dir="rtl"/></source></segment>
+            """);
+
+        var end = (EndCodePart)unit.Segments[0].SourceContent.Parts[2];
+        Assert.AreEqual(InlineCodeType.Format, end.Type);
+        Assert.AreEqual("xlf:b", end.SubType);
+        Assert.AreEqual("[/b]", end.Equiv);
+        Assert.AreEqual("</b>", end.Disp);
+        Assert.AreEqual("d1", end.DataRef);
+        Assert.AreEqual("</b>", end.OriginalData?.Text);
+        Assert.IsFalse(end.CanCopy);
+        Assert.IsFalse(end.CanDelete);
+        Assert.IsFalse(end.CanOverlap);
+        Assert.AreEqual(ReorderHint.FirstNo, end.CanReorder);
+        Assert.AreEqual("0", end.CopyOf);
+        Assert.AreEqual("u2", end.SubFlows);
+        Assert.AreEqual(TextDirection.RightToLeft, end.Direction);
+    }
+
+    [TestMethod]
     public void RejectsAnIsolatedEndCodeWithoutAnId()
     {
         XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><ec isolated="yes"/></source></segment>""");
@@ -261,6 +306,20 @@ public sealed class XliffReaderInlineContentTests
         XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><ec id="2" isolated="yes" startRef="1"/></source></segment>""");
 
         Assert.Contains("must not declare a startRef attribute", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void RejectsAnIsolatedEndCodeWithAnInvalidIdAndCarriesLineAndPosition()
+    {
+        //Named killer: XliffReader.InlineContent.cs (AppendEndCode's isolated branch), the
+        //try/catch that wraps RequireNameToken with WithLocation removed would still throw the same
+        //XliffFormatException but without Line/Position set, since RequireNameToken itself never
+        //touches the element's line info; only the wrapping catches that.
+        XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><ec id="not a token" isolated="yes"/></source></segment>""");
+
+        Assert.Contains("is not an XML name token", exception.Message, StringComparison.Ordinal);
+        Assert.IsNotNull(exception.Line);
+        Assert.IsNotNull(exception.Position);
     }
 
     [TestMethod]
@@ -317,11 +376,15 @@ public sealed class XliffReaderInlineContentTests
         Assert.Contains("names no open <sc> on this side", exception.Message, StringComparison.Ordinal);
     }
 
-    // ---- mrk / sm / em --------------------------------------------------------------------------
-
     [TestMethod]
     public void ReadsAMarkerAnnotationWithTranslateFalse()
     {
+        //Named killer: XliffReader.InlineContent.cs:519 (AppendMarker), the recursive
+        //`state = AppendNodes(element.Nodes(), builder, state, context);` call over the mrk's children
+        //replaced with a no-op would drop the "ACME" text run the mrk wraps, shifting every later index
+        //down by one; Parts[3] would then be the trailing " as is" text instead of the
+        //AnnotationEndPart, so the cast below throws InvalidCastException instead of the assertions
+        //passing.
         XliffUnit unit = ReadUnit("""<segment><source>Keep <mrk id="m1" translate="no">ACME</mrk> as is</source></segment>""");
 
         InlineContent content = unit.Segments[0].SourceContent;
@@ -381,6 +444,17 @@ public sealed class XliffReaderInlineContentTests
     }
 
     [TestMethod]
+    public void RejectsACommentAnnotationWithBothValueAndRef()
+    {
+        //Named killer: XliffReader.InlineContent.cs (ParseAnnotationAttributes), dropping this
+        //"both value and ref" guard would silently accept a comment annotation carrying both.
+        XliffFormatException exception = ReadUnitExpectingFailure(
+            """<segment><source><mrk id="m1" type="comment" value="v" ref="#n=n1">x</mrk></source></segment>""");
+
+        Assert.Contains("has both a value and a ref attribute", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
     public void ReadsASplitAnnotationAcrossTwoSegments()
     {
         XliffUnit unit = ReadUnit("""
@@ -423,8 +497,6 @@ public sealed class XliffReaderInlineContentTests
         Assert.Contains("does not declare the required startRef attribute", exception.Message, StringComparison.Ordinal);
     }
 
-    // ---- cp: acceptance and refusals (5.3.1) -----------------------------------------------------
-
     [TestMethod]
     public void DecodesATwoDigitCodePoint()
     {
@@ -457,6 +529,18 @@ public sealed class XliffReaderInlineContentTests
         XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><cp hex="zz"/></source></segment>""");
 
         Assert.Contains("is not a valid hexadecimal number", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void RejectsACodePointHexPaddedWithWhiteSpace()
+    {
+        //Named killer: XliffReader.InlineContent.cs (ParseCodePointHex), removing the per-character
+        //char.IsAsciiHexDigit loop would leave only int.TryParse(hex, NumberStyles.HexNumber, ...), and
+        //HexNumber's own AllowLeadingWhite/AllowTrailingWhite flags would then let a value padded with
+        //white space through: " A0 " would decode to U+00A0 and " A"/"A " to U+000A instead of refusing.
+        Assert.Contains("is not a valid hexadecimal number", ReadUnitExpectingFailure("""<segment><source><cp hex=" A0 "/></source></segment>""").Message, StringComparison.Ordinal);
+        Assert.Contains("is not a valid hexadecimal number", ReadUnitExpectingFailure("""<segment><source><cp hex=" A"/></source></segment>""").Message, StringComparison.Ordinal);
+        Assert.Contains("is not a valid hexadecimal number", ReadUnitExpectingFailure("""<segment><source><cp hex="A "/></source></segment>""").Message, StringComparison.Ordinal);
     }
 
     [TestMethod]
@@ -507,7 +591,19 @@ public sealed class XliffReaderInlineContentTests
         Assert.AreEqual("x\ty", placeholder.OriginalData?.Text);
     }
 
-    // ---- type / subType ---------------------------------------------------------------------------
+    [TestMethod]
+    public void RejectsACodePointWithAnUnsupportedAttributeInsideData()
+    {
+        //Named killer: XliffReader.InlineContent.cs (ReadDataText), dropping the RefuseUnknownAttributes
+        //call on the cp arm would let a <cp> inside <data> carry an attribute a <cp> inside content
+        //could never get away with.
+        XliffFormatException exception = ReadUnitExpectingFailure("""
+            <originalData><data id="d1"><cp hex="0009" bogus="x"/></data></originalData>
+            <segment><source>x</source></segment>
+            """);
+
+        Assert.Contains("carries the unsupported attribute 'bogus'", exception.Message, StringComparison.Ordinal);
+    }
 
     [TestMethod]
     public void RejectsACodeTypeOutsideTheSixReservedValues()
@@ -548,8 +644,6 @@ public sealed class XliffReaderInlineContentTests
 
         Assert.AreEqual("myTool:widget", ((PlaceholderPart)unit.Segments[0].SourceContent.Parts.Single()).SubType);
     }
-
-    // ---- originalData / data -----------------------------------------------------------------------
 
     [TestMethod]
     public void ReadsOriginalDataWithAnExplicitDirection()
@@ -620,7 +714,32 @@ public sealed class XliffReaderInlineContentTests
         Assert.Contains("Duplicate <data> id 'd1'", exception.Message, StringComparison.Ordinal);
     }
 
-    // ---- shared-id rule (XLIFF 2.1 §4.3.1.21), in both directions ----------------------------------
+    [TestMethod]
+    public void RejectsASecondOriginalDataElementInTheUnit()
+    {
+        //Named killer: XliffReader.InlineContent.cs (ParseOriginalData), dropping the
+        //`if(originalDataElement is not null)` guard would silently keep only the first
+        //<originalData> element's entries instead of refusing the second one.
+        XliffFormatException exception = ReadUnitExpectingFailure("""
+            <originalData><data id="d1">a</data></originalData>
+            <originalData><data id="d2">b</data></originalData>
+            <segment><source>x</source></segment>
+            """);
+
+        Assert.Contains("has more than one <originalData> element", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void RejectsAForeignNamespaceElementInsideData()
+    {
+        //Named killer: XliffReader.InlineContent.cs (ReadDataText), dropping the trailing
+        //`case(XElement element): throw ...` arm would silently ignore any element that is not a core
+        //<cp>, letting "a<ext:tag>hidden</ext:tag>b" read as "ab" instead of being refused.
+        XliffFormatException exception = ReadUnitExpectingFailure(
+            """<originalData xmlns:ext="urn:example:ext"><data id="d1">a<ext:tag/>b</data></originalData><segment><source>x</source></segment>""");
+
+        Assert.Contains("appears inside <data> in unit 'u'", exception.Message, StringComparison.Ordinal);
+    }
 
     [TestMethod]
     public void ATargetElementMayReuseItsSiblingSourceElementsId()
@@ -629,6 +748,19 @@ public sealed class XliffReaderInlineContentTests
 
         Assert.AreEqual("1", ((PlaceholderPart)unit.Segments[0].SourceContent.Parts[1]).Id);
         Assert.AreEqual("1", ((PlaceholderPart)unit.Segments[0].TargetContent!.Parts[1]).Id);
+    }
+
+    [TestMethod]
+    public void TargetSideRejectsTheSameIdUsedTwiceEvenWhenItsSiblingSourceUsesIt()
+    {
+        //Named killer: XliffReader.InlineContent.cs (RegisterInlineId), applying the sibling-source
+        //exemption to the same-side check (instead of only the cross-side one) would let the second
+        //<ph id="1"/> in the target below pass, because its sibling source also uses "1": the exemption
+        //covers one reuse of the source's id, not a second use on the target's own side.
+        XliffFormatException exception = ReadUnitExpectingFailure(
+            """<segment><source><ph id="1"/></source><target><ph id="1"/><ph id="1"/></target></segment>""");
+
+        Assert.Contains("is used more than once in unit 'u'", exception.Message, StringComparison.Ordinal);
     }
 
     [TestMethod]
@@ -653,6 +785,12 @@ public sealed class XliffReaderInlineContentTests
     public void TargetSideRejectsReusingAnIdFromADifferentSegmentsSource()
     {
         //segment 2's target tries to reuse segment 1's source id, which is not its own sibling.
+        //Named killer: XliffReader.cs:921 (now unchanged in position by this fix), dropping
+        //`.Except(sourceState.Ids)` from siblingSourceIds's computation would make it the cumulative set
+        //of every source id ever seen on this side (here {"1"}, from segment 1) rather than just this
+        //segment's own newly-introduced ids (empty, since segment 2's source is plain text "x"), so
+        //segment 2's target above would wrongly look exempt to reuse segment 1's id and this assertion
+        //would never see an exception.
         XliffFormatException exception = ReadUnitExpectingFailure("""
             <segment><source><ph id="1"/></source></segment>
             <segment><source>x</source><target><ph id="1"/></target></segment>
@@ -667,6 +805,21 @@ public sealed class XliffReaderInlineContentTests
         XliffFormatException exception = ReadUnitExpectingFailure("""
             <segment><source>x</source><target><ph id="added"/></target></segment>
             <segment><source>y</source><target><ph id="added"/></target></segment>
+            """);
+
+        Assert.Contains("is used more than once in unit 'u'", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void SourceSideRejectsAnIdAnEarlierSegmentsTargetIntroduced()
+    {
+        //Named killer: XliffReader.cs (ParseSegment), building the source side's InlineParseContext
+        //with ImmutableHashSet<string>.Empty as OtherSideIds instead of the incoming targetState.Ids
+        //would leave segment 2's source unaware that segment 1's target already introduced id "2" as an
+        //added code, so the <ph id="2"/> below would wrongly be accepted instead of refused.
+        XliffFormatException exception = ReadUnitExpectingFailure("""
+            <segment><source>x</source><target><ph id="2"/></target></segment>
+            <segment><source><ph id="2"/></source></segment>
             """);
 
         Assert.Contains("is used more than once in unit 'u'", exception.Message, StringComparison.Ordinal);
@@ -693,8 +846,6 @@ public sealed class XliffReaderInlineContentTests
         Assert.Contains("is used more than once in unit 'u'", exception.Message, StringComparison.Ordinal);
     }
 
-    // ---- foreign-namespace elements, CDATA and comments inside content -----------------------------
-
     [TestMethod]
     public void RejectsAForeignNamespaceElementInsideContent()
     {
@@ -720,8 +871,6 @@ public sealed class XliffReaderInlineContentTests
         Assert.AreEqual("ab", ((InlineTextPart)unit.Segments[0].SourceContent.Parts.Single()).Text);
     }
 
-    // ---- 5.1: an empty <target> is null, an empty <source> is InlineContent.Empty -------------------
-
     [TestMethod]
     public void AnEmptyTargetElementBecomesANullTargetContent()
     {
@@ -737,8 +886,6 @@ public sealed class XliffReaderInlineContentTests
 
         Assert.AreEqual(InlineContent.Empty, unit.Segments[0].SourceContent);
     }
-
-    // ---- streaming path -------------------------------------------------------------------------
 
     [TestMethod]
     public void TheStreamingPathParsesInlineContentTheSameWayAsTheWholeDocumentRead()

@@ -912,7 +912,11 @@ public static partial class XliffReader
             throw new XliffFormatException($"A <{element.Name.LocalName}> in unit '{unitId}' has no <source> element.");
         }
 
-        InlineParseContext sourceContext = new(IsTarget: false, ImmutableHashSet<string>.Empty, ImmutableHashSet<string>.Empty, data, unitId);
+        //The source side is checked against every earlier segment's target ids too (XLIFF 2.1 §4.3.1.21
+        //is symmetric: the sibling-reuse exemption only ever runs the other way, target reusing source,
+        //so an id this segment's source introduces must not repeat one an earlier segment's target
+        //already used).
+        InlineParseContext sourceContext = new(IsTarget: false, targetState.Ids, ImmutableHashSet<string>.Empty, data, unitId);
         (InlineContent sourceContent, InlineParseState newSourceState) = ParseInlineContentRoot(sourceElement, sourceState, sourceContext);
 
         //XLIFF 2.1 §4.3.1.21: the only ids a target element may reuse are those of its own sibling
