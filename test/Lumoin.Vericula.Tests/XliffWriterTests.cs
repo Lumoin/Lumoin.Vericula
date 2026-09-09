@@ -685,22 +685,20 @@ public sealed class XliffWriterTests
     }
 
     [TestMethod]
-    public void RejectsTextWithCharactersXmlCannotCarry()
+    public void RoundTripsSourceTextContainingACharacterXmlCannotCarryAsACodePoint()
     {
-        var document = new XliffDocument(XliffVersion.V20, [NewFile("wallet", "en", null, [], [NewUnit("A", "bad\u0001char")])]);
-        using var stream = new MemoryStream();
+        //5.4 replaces the old whole-string refusal: a source or target character
+        //XmlConvert.IsXmlChar refuses is now written as <cp hex="..."/> instead of rejecting the
+        //document; RejectsAU0001CharacterInANote and its siblings still refuse the character
+        //everywhere it cannot be cp-encoded, such as a note or an equiv.
+        var document = new XliffDocument(XliffVersion.V20, [NewFile("wallet", "en", null, [], [NewUnit("A", "bad\x0001char")])]);
 
-        ArgumentException exception = Assert.ThrowsExactly<ArgumentException>(() => XliffWriter.Write(document, stream));
+        byte[] bytes = WriteToBytes(document);
+        string xml = Encoding.UTF8.GetString(bytes);
+        XliffDocument roundTripped = Read(bytes);
 
-        Assert.Contains("cannot carry", exception.Message);
-
-        //Kills XliffWriter.cs:941: without the unit id in the "what" fragment passed to
-        //XmlTextProblems for a segment's source, the message reads "The text of  contains a
-        //character XML cannot carry." for every unit alike, so asserting the source's own unit
-        //context survives in the text tells the mutant apart from the original.
-        Assert.Contains("the source of unit 'A'", exception.Message);
-        Assert.AreEqual("document", exception.ParamName);
-        Assert.AreEqual(0, stream.Length);
+        Assert.Contains("<cp hex=\"0001\"", xml);
+        Assert.AreEqual("bad\x0001char", roundTripped.Files[0].Units[0].Source);
     }
 
     [TestMethod]
@@ -787,11 +785,18 @@ public sealed class XliffWriterTests
     }
 
     [TestMethod]
-    public void RejectsAU0001CharacterInATarget()
+    public void RoundTripsTargetTextContainingACharacterXmlCannotCarryAsACodePoint()
     {
         //The U+0001 control character below is spelled as the escape rather than the raw invisible
-        //byte, so it shows up in a plain-text search of this file.
-        AssertRejected(new XliffDocument(XliffVersion.V20, [NewFile("wallet", "en", "fi", [], [NewUnit("A", "Home", "bad\u0001target")])]), "the target of unit");
+        //byte, so it shows up in a plain-text search of this file. 5.4 replaces the old whole-string
+        //refusal (RejectsAU0001CharacterInATarget) with cp encoding, so this now round-trips instead
+        //of being rejected.
+        var document = new XliffDocument(XliffVersion.V20, [NewFile("wallet", "en", "fi", [], [NewUnit("A", "Home", "bad\x0001target")])]);
+
+        byte[] bytes = WriteToBytes(document);
+        XliffDocument roundTripped = Read(bytes);
+
+        Assert.AreEqual("bad\x0001target", roundTripped.Files[0].Units[0].Target);
     }
 
     [TestMethod]
@@ -834,7 +839,8 @@ public sealed class XliffWriterTests
     [TestMethod]
     public void ListsEveryProblemInOneMessage()
     {
-        var document = new XliffDocument(XliffVersion.V20, [NewFile("wallet", "en", null, [], [NewUnit("A", "One", "Yksi"), NewUnit("A", "bad\u0001char")])]);
+        XliffUnit second = NewUnit("A", "Two", null, "bad\x0001note");
+        var document = new XliffDocument(XliffVersion.V20, [NewFile("wallet", "en", null, [], [NewUnit("A", "One", "Yksi"), second])]);
 
         ArgumentException exception = Assert.ThrowsExactly<ArgumentException>(() => WriteToBytes(document));
 

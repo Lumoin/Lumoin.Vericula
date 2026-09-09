@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO.Pipelines;
 using System.Text;
 using System.Xml;
+using Lumoin.Vericula.Content;
 using Lumoin.Vericula.Documents;
 using Lumoin.Vericula.Glossaries;
 using Lumoin.Vericula.Scopes;
@@ -35,7 +36,7 @@ namespace Lumoin.Vericula.Parsing;
 /// always yields the same bytes.
 /// </para>
 /// </remarks>
-public static class XliffWriter
+public static partial class XliffWriter
 {
     /// <summary>
     /// Serializes the document as XLIFF and writes the bytes to a pipe, completing it.
@@ -251,6 +252,7 @@ public static class XliffWriter
 
     /// <summary>
     /// Writes one &lt;unit&gt; element: its id, scopes and metadata, the Glossary module, its notes,
+    /// its &lt;originalData&gt; (5.4, <see cref="CollectOriginalData(XliffUnit)"/>) when any part carries some,
     /// and its segments and ignorables in document order.
     /// </summary>
     private static void WriteUnit(XmlWriter writer, XliffUnit unit)
@@ -275,6 +277,12 @@ public static class XliffWriter
             writer.WriteEndElement();
         }
 
+        ImmutableArray<(string Id, OriginalData Data)> originalData = CollectOriginalData(unit);
+        if(!originalData.IsEmpty)
+        {
+            WriteOriginalDataElement(writer, originalData);
+        }
+
         foreach(XliffSegment segment in unit.Segments)
         {
             WriteSegment(writer, segment);
@@ -286,7 +294,9 @@ public static class XliffWriter
     /// <summary>
     /// Writes one &lt;segment&gt; or &lt;ignorable&gt; element with its id, source and target; a
     /// translatable segment also carries its state and sub-state, which XLIFF 2.1 §4.3.1.31 state
-    /// and §4.3.1.35 subState reserve for &lt;segment&gt; alone.
+    /// and §4.3.1.35 subState reserve for &lt;segment&gt; alone. The source and target elements are
+    /// written from <see cref="XliffSegment.SourceContent"/>/<see cref="XliffSegment.TargetContent"/>'s
+    /// parts (5.4, <see cref="WriteInlineContent"/>), not from the rendered <see cref="XliffSegment.Source"/>/<see cref="XliffSegment.Target"/> strings.
     /// </summary>
     private static void WriteSegment(XmlWriter writer, XliffSegment segment)
     {
@@ -310,10 +320,10 @@ public static class XliffWriter
             }
         }
 
-        writer.WriteElementString(WellKnownXliffElements.Source, segment.Source);
-        if(segment.Target is not null)
+        WriteInlineContent(writer, WellKnownXliffElements.Source, segment.SourceContent.Parts);
+        if(segment.TargetContent is not null)
         {
-            writer.WriteElementString(WellKnownXliffElements.Target, segment.Target);
+            WriteInlineContent(writer, WellKnownXliffElements.Target, segment.TargetContent.Parts);
         }
 
         writer.WriteEndElement();
@@ -913,6 +923,11 @@ public static class XliffWriter
             }
         }
 
+        foreach(string problem in InlineUnitProblems(unit))
+        {
+            yield return problem;
+        }
+
         foreach(XliffSegment segment in unit.Segments)
         {
             foreach(string problem in Problems(segment, unit, file, fileTargetLanguage))
@@ -924,11 +939,13 @@ public static class XliffWriter
 
     /// <summary>
     /// Yields every reason one segment or ignorable cannot be written: an id that is not an XML
-    /// name token, source, target or sub-state text XML cannot carry, a target with no file target
-    /// language to pair it with, an undefined state, a state or sub-state on an
-    /// &lt;ignorable&gt;, which XLIFF gives no attribute to carry either, and a
-    /// <see cref="SegmentState.NeedsTranslation"/> segment carrying its own, different sub-state,
-    /// since that state's reserved sub-state is the only channel it is written through.
+    /// name token, an inline part field XML cannot carry (5.4, <see cref="InlinePartFieldProblems"/>;
+    /// text parts and original data are <c>cp</c>-encoded instead, so they are never refused here), a
+    /// sub-state XML cannot carry, a target with no file target language to pair it with, an
+    /// undefined state, a state or sub-state on an &lt;ignorable&gt;, which XLIFF gives no attribute to
+    /// carry either, and a <see cref="SegmentState.NeedsTranslation"/> segment carrying its own,
+    /// different sub-state, since that state's reserved sub-state is the only channel it is written
+    /// through.
     /// </summary>
     private static IEnumerable<string> Problems(XliffSegment segment, XliffUnit unit, XliffFile file, string? fileTargetLanguage)
     {
@@ -940,14 +957,17 @@ public static class XliffWriter
             }
         }
 
-        foreach(string problem in XmlTextProblems(segment.Source, $"the source of unit '{unit.Id}'"))
+        foreach(string problem in InlinePartFieldProblems(segment.SourceContent.Parts, $"the source of unit '{unit.Id}'"))
         {
             yield return problem;
         }
 
-        foreach(string problem in XmlTextProblems(segment.Target, $"the target of unit '{unit.Id}'"))
+        if(segment.TargetContent is not null)
         {
-            yield return problem;
+            foreach(string problem in InlinePartFieldProblems(segment.TargetContent.Parts, $"the target of unit '{unit.Id}'"))
+            {
+                yield return problem;
+            }
         }
 
         foreach(string problem in XmlTextProblems(segment.SubState, $"the sub-state of a segment in unit '{unit.Id}'"))
