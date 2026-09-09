@@ -431,6 +431,18 @@ public sealed class XliffReaderInlineContentTests
     }
 
     [TestMethod]
+    public void TheUnclosedStartCodeMessageNamesTheSourceSideWhenTheOpenCodeIsOnTheSource()
+    {
+        //Named killer: XliffReader.cs:858, the "source" literal passed as the side parameter to
+        //RequireEveryStartCodeClosedOrIsolated(sourceState, id, "source", unitElement) mutated to "":
+        //the message would read "on the  side" instead of naming which side the unclosed <sc> is on.
+        //RejectsAStartCodeStillOpenAtTheEndOfTheUnit only asserts the common "never closed" suffix.
+        XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source>x<sc id="1"/></source></segment>""");
+
+        Assert.Contains("on the source side", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
     public void RejectsAStartCodeStillOpenOnTheTargetSideAtTheEndOfTheUnit()
     {
         //Named killer: XliffReader.cs:859, the target-side call to RequireEveryStartCodeClosedOrIsolated
@@ -439,6 +451,18 @@ public sealed class XliffReaderInlineContentTests
         XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source>x</source><target>y<sc id="1"/></target></segment>""");
 
         Assert.Contains("that is never closed by a matching <ec>", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void TheUnclosedStartCodeMessageNamesTheTargetSideWhenTheOpenCodeIsOnTheTarget()
+    {
+        //Named killer: XliffReader.cs:859, the "target" literal passed as the side parameter to
+        //RequireEveryStartCodeClosedOrIsolated(targetState, id, "target", unitElement) mutated to "":
+        //the message would read "on the  side" instead of naming which side the unclosed <sc> is on.
+        XliffFormatException exception = ReadUnitExpectingFailure(
+            """<segment><source>x</source><target>y<sc id="1"/></target></segment>""");
+
+        Assert.Contains("on the target side", exception.Message, StringComparison.Ordinal);
     }
 
     [TestMethod]
