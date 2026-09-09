@@ -44,6 +44,18 @@ public sealed class InlineContentTests
     }
 
     [TestMethod]
+    public void CreateOfAnEmptySequenceReturnsTheCanonicalEmptyInstance()
+    {
+        //Named killer: InlineContent.cs:89, the `builder.Count == 0 ? Empty : ...` conditional's false
+        //branch forced permanently taken, so Create of an empty sequence would allocate a new,
+        //value-equal but not reference-equal InlineContent instead of returning the canonical Empty
+        //singleton the XML doc on Create promises.
+        InlineContent content = InlineContent.Create(Array.Empty<InlinePart>());
+
+        Assert.AreSame(InlineContent.Empty, content);
+    }
+
+    [TestMethod]
     public void CreateTreatsADefaultImmutableArrayTheSameAsAnEmptySequence()
     {
         //A default(ImmutableArray<InlinePart>) throws if enumerated directly (its backing array is
@@ -169,6 +181,19 @@ public sealed class InlineContentTests
     }
 
     [TestMethod]
+    public void GetHashCodeDiffersForContentsWithDifferentParts()
+    {
+        //Named killer: InlineContent.cs:164, GetHashCode's `hash.Add(part)` statement deleted: every
+        //content, regardless of its parts, would then hash to the same fixed HashCode.ToHashCode()
+        //value, so two contents built from different text would collide instead of (almost certainly)
+        //differing.
+        InlineContent first = InlineContent.FromText("Home");
+        InlineContent second = InlineContent.FromText("Away");
+
+        Assert.AreNotEqual(first.GetHashCode(), second.GetHashCode());
+    }
+
+    [TestMethod]
     public void ContentsWithDifferentPartsAreNotEqual()
     {
         Assert.AreNotEqual(InlineContent.FromText("Home"), InlineContent.FromText("Away"));
@@ -206,6 +231,28 @@ public sealed class InlineContentTests
         InlineContent content = InlineContent.Create([new InlineTextPart("Salt & pepper <3"), Placeholder("ph1")]);
 
         Assert.AreEqual("Salt &amp; pepper &lt;3<br/>", content.Render(InlineRendering.Markup));
+    }
+
+    [TestMethod]
+    public void RenderMarkupEscapesATextRunThatStartsWithAnEscapedCharacter()
+    {
+        //Named killer: InlineContent.cs:261, EscapeMarkupText's `IndexOfAny(...) < 0` changed to
+        //`<= 0`: a text run whose first character is one of '&', '<', '>' has IndexOfAny return 0,
+        //which the mutant treats the same as "not found" and returns the text unescaped.
+        InlineContent content = InlineContent.Create([new InlineTextPart("<b> tag text"), Placeholder("ph1")]);
+
+        Assert.AreEqual("&lt;b&gt; tag text<br/>", content.Render(InlineRendering.Markup));
+    }
+
+    [TestMethod]
+    public void RenderMarkupEscapesAGreaterThanCharacterInText()
+    {
+        //Named killer: InlineContent.cs:273, EscapeMarkupText's '>' arm changed from "&gt;" to "":
+        //a text run containing '>' would have the character silently dropped from the HTML fragment
+        //instead of escaped.
+        InlineContent content = InlineContent.Create([new InlineTextPart("5 > 3"), Placeholder("ph1")]);
+
+        Assert.AreEqual("5 &gt; 3<br/>", content.Render(InlineRendering.Markup));
     }
 
     [TestMethod]
