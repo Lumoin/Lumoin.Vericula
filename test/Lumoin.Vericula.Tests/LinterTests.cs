@@ -378,6 +378,96 @@ public sealed class LinterTests
     }
 
     [TestMethod]
+    public void AnUnresolvablePlaceholderInSourceIsNotReportedAsAClosingHalf()
+    {
+        //Linter.cs:348, LintUnresolvableCodes: the PlaceholderPart arm's closingHalf `false` =>
+        //`true` - a placeholder is never a closing half, so its role must read "(source)" alone;
+        //the mutant would wrongly append ", closing half" to a code kind XLIFF has no such notion for.
+        var placeholder = new PlaceholderPart("ph1", InlineCodeType.None, null, "[x]", null, null, null, true, true, ReorderHint.Yes, null, null);
+        XliffUnit unit = UnitOf(new XliffSegment("s1", SegmentKind.Translatable, InlineContent.Create([placeholder]), InlineContent.FromText("x"), SegmentState.Translated, null));
+
+        XliffFile file = new(
+            "wallet",
+            new LanguageTag("en"),
+            TargetLanguage: null,
+            ToneProfile: null,
+            Glossary: null,
+            ValidationRules: null,
+            ImmutableArray<XliffGroup>.Empty,
+            ImmutableArray.Create(unit));
+
+        LintDiagnostic diagnostic = Only(Linter.Lint(DocumentOf(file)));
+
+        Assert.Contains("(source)", diagnostic.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("closing half", diagnostic.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void AnUnresolvableStartCodeInSourceIsNotReportedAsAClosingHalf()
+    {
+        //Linter.cs:349, LintUnresolvableCodes: the StartCodePart arm's closingHalf `false` =>
+        //`true` - an opening code is never a closing half; the mutant would wrongly append
+        //", closing half" to a start code's role.
+        var start = new StartCodePart("sc1", InlineCodeType.None, null, "[start]", null, null, null, true, true, ReorderHint.Yes, null, null, true, false, TextDirection.Inherited, SpanForm.Split);
+        XliffUnit unit = UnitOf(new XliffSegment("s1", SegmentKind.Translatable, InlineContent.Create([start]), InlineContent.FromText("x"), SegmentState.Translated, null));
+
+        XliffFile file = new(
+            "wallet",
+            new LanguageTag("en"),
+            TargetLanguage: null,
+            ToneProfile: null,
+            Glossary: null,
+            ValidationRules: null,
+            ImmutableArray<XliffGroup>.Empty,
+            ImmutableArray.Create(unit));
+
+        LintDiagnostic diagnostic = Only(Linter.Lint(DocumentOf(file)));
+
+        Assert.Contains("(source)", diagnostic.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("closing half", diagnostic.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void UnresolvableEndCodesReportTheCorrectIdAndClosingHalfLabel()
+    {
+        //Linter.cs:350, LintUnresolvableCodes: `end.Isolated ? end.Id : end.StartRef` forced to
+        //either branch makes codeId null for one of the two end kinds (a non-isolated end's Id is
+        //null; an isolated end's StartRef is null), which the null check on line 354 turns into a
+        //silently dropped diagnostic (Assert.HasCount(2, ...) below catches both directions);
+        //Linter.cs:350, `!end.Isolated` flipped to `end.Isolated` swaps which kind is labelled
+        //"closing half" (the Contains/DoesNotContain pair on each message below catches it); and
+        //Linter.cs:359, `closingHalf ? $"{side}, closing half" : side` forced to either branch, or
+        //its "{side}, closing half" text emptied, makes every role read the same (the same
+        //Contains/DoesNotContain pair catches it). One resolvable start (a reserved xlf:b subType,
+        //so it never reaches the unresolvable check itself), one unresolvable non-isolated end
+        //closing it, and one unresolvable isolated end pin both id resolution paths and both role
+        //shapes in a single document-order assertion.
+        var start = new StartCodePart("sc1", InlineCodeType.Format, "xlf:b", "[start]", null, null, null, true, true, ReorderHint.Yes, null, null, true, false, TextDirection.Inherited, SpanForm.Split);
+        var closingEnd = new EndCodePart("sc1", null, InlineCodeType.None, null, "[end]", null, null, null, true, true, true, ReorderHint.Yes, null, null, false, TextDirection.Inherited, SpanForm.Split);
+        var isolatedEnd = new EndCodePart(null, "ec1", InlineCodeType.None, null, "[end]", null, null, null, true, true, true, ReorderHint.Yes, null, null, true, TextDirection.LeftToRight, SpanForm.Split);
+        XliffUnit unit = UnitOf(new XliffSegment("s1", SegmentKind.Translatable, InlineContent.Create([start, closingEnd, isolatedEnd]), InlineContent.FromText("x"), SegmentState.Translated, null));
+
+        XliffFile file = new(
+            "wallet",
+            new LanguageTag("en"),
+            TargetLanguage: null,
+            ToneProfile: null,
+            Glossary: null,
+            ValidationRules: null,
+            ImmutableArray<XliffGroup>.Empty,
+            ImmutableArray.Create(unit));
+
+        ImmutableArray<LintDiagnostic> diagnostics = Linter.Lint(DocumentOf(file));
+
+        Assert.HasCount(2, diagnostics);
+        Assert.Contains("'sc1'", diagnostics[0].Message, StringComparison.Ordinal);
+        Assert.Contains("(source, closing half)", diagnostics[0].Message, StringComparison.Ordinal);
+        Assert.Contains("'ec1'", diagnostics[1].Message, StringComparison.Ordinal);
+        Assert.Contains("(source)", diagnostics[1].Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("closing half)", diagnostics[1].Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
     public void SegmentLevelRulesEvaluateAgainstThePlainRenderingNotMarkup()
     {
         //5.6: segment-level checks run on the segment's Plain content. A ph resolved from
@@ -808,6 +898,10 @@ public sealed class LinterTests
         //r1-35: a raw substring test lets a short term match inside an unrelated word - "art" inside
         //"Start" - and raise a false VFX106. Term detection must respect Unicode word boundaries, so a
         //source that merely contains the term's letters as part of a longer word must lint clean.
+        //Linter.cs:494, ContainsTerm's advancing loop, `index++;` => `;`, and `index++` => `index--`:
+        //both mutants make the loop re-find the same rejected "art" match inside "Start" forever
+        //instead of advancing past it, hanging instead of returning false; this case is what makes
+        //the loop revisit index 2 on every pass, so it also proves both mutants by timeout.
         var glossary = new Glossary(ImmutableArray.Create(
             new GlossaryEntry("art", "taide", null, GlossaryEntryStatus.Preferred, ImmutableArray<Scope>.Empty, null)));
 
