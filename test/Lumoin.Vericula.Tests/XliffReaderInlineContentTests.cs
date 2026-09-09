@@ -35,6 +35,14 @@ public sealed class XliffReaderInlineContentTests
         return Assert.ThrowsExactly<XliffFormatException>(() => XliffReader.Read(stream));
     }
 
+    /// <summary>Wraps a unit body and expects the streaming read to throw the same way the whole-document read does (the both-path parity the reader's refusals are held to, 5.3.2).</summary>
+    private static XliffFormatException ReadUnitsExpectingFailure(string unitBody)
+    {
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(Wrap(unitBody)));
+
+        return Assert.ThrowsExactly<XliffFormatException>(() => XliffReader.ReadUnits(stream).ToArray());
+    }
+
     [TestMethod]
     public void ReadsAPlaceholderWithItsAttributeDefaults()
     {
@@ -87,6 +95,46 @@ public sealed class XliffReaderInlineContentTests
         //existing contract for a missing id elsewhere (MissingIdExceptionCarriesTheElementsLineAndPosition).
         Assert.IsNotNull(exception.Line);
         Assert.IsNotNull(exception.Position);
+    }
+
+    [TestMethod]
+    public void RejectsAStartCodeWithoutAnId()
+    {
+        XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><sc/></source></segment>""");
+
+        Assert.Contains("A <sc> element does not declare the required id attribute", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void TheStreamingPathAlsoRejectsAStartCodeWithoutAnId()
+    {
+        XliffFormatException exception = ReadUnitsExpectingFailure("""<segment><source><sc/></source></segment>""");
+
+        Assert.Contains("A <sc> element does not declare the required id attribute", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void RejectsAPairedCodeWithoutAnId()
+    {
+        XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><pc>x</pc></source></segment>""");
+
+        Assert.Contains("A <pc> element does not declare the required id attribute", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void RejectsAMarkerWithoutAnId()
+    {
+        XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><mrk>x</mrk></source></segment>""");
+
+        Assert.Contains("A <mrk> element does not declare the required id attribute", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void RejectsAStartMarkerWithoutAnId()
+    {
+        XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><sm/></source></segment>""");
+
+        Assert.Contains("A <sm> element does not declare the required id attribute", exception.Message, StringComparison.Ordinal);
     }
 
     [TestMethod]
@@ -331,6 +379,27 @@ public sealed class XliffReaderInlineContentTests
     }
 
     [TestMethod]
+    public void RejectsANonIsolatedEndCodeThatCarriesAnId()
+    {
+        //XLIFF 2.1 §4.2.3.5: id is used if and only if isolated="yes"; a non-isolated <ec> that also
+        //carries id must be refused, not silently accepted with the id dropped (the reader's own
+        //follow-up from the step 2 review, applied here).
+        XliffFormatException exception = ReadUnitExpectingFailure(
+            """<segment><source><sc id="1"/>x<ec startRef="1" id="stray"/></source></segment>""");
+
+        Assert.Contains("declares an id attribute without isolated=\"yes\"", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void TheStreamingPathAlsoRejectsANonIsolatedEndCodeThatCarriesAnId()
+    {
+        XliffFormatException exception = ReadUnitsExpectingFailure(
+            """<segment><source><sc id="1"/>x<ec startRef="1" id="stray"/></source></segment>""");
+
+        Assert.Contains("declares an id attribute without isolated=\"yes\"", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
     public void RejectsAnEndCodeWhoseStartRefNamesNoOpenStartCode()
     {
         XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><ec startRef="missing"/></source></segment>""");
@@ -455,6 +524,68 @@ public sealed class XliffReaderInlineContentTests
     }
 
     [TestMethod]
+    public void TheStreamingPathAlsoRejectsACommentAnnotationWithBothValueAndRef()
+    {
+        //Spot-checks that the already-satisfied (c) refusal (XliffReader.InlineContent.cs:606) fires
+        //identically on the streaming path; it shares ParseUnit/ParseInlineContentRoot with the
+        //whole-document path (XliffReader.cs: AcceptUnit calls the same ParseUnit the whole-document
+        //read calls), so no separate implementation exists here to diverge.
+        XliffFormatException exception = ReadUnitsExpectingFailure(
+            """<segment><source><mrk id="m1" type="comment" value="v" ref="#n=n1">x</mrk></source></segment>""");
+
+        Assert.Contains("has both a value and a ref attribute", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void RejectsAnAnnotationTypeThatIsNeitherReservedNorShapedAsPrefixValue()
+    {
+        //XLIFF 2.1 §4.3.1.40, §4.7.3.1.4: a type outside generic/term/comment must be shaped prefix:value.
+        XliffFormatException exception = ReadUnitExpectingFailure(
+            """<segment><source><mrk id="m1" type="bogus">x</mrk></source></segment>""");
+
+        Assert.Contains("has the unsupported type 'bogus'", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void TheStreamingPathAlsoRejectsAnAnnotationTypeThatIsNeitherReservedNorShapedAsPrefixValue()
+    {
+        XliffFormatException exception = ReadUnitsExpectingFailure(
+            """<segment><source><mrk id="m1" type="bogus">x</mrk></source></segment>""");
+
+        Assert.Contains("has the unsupported type 'bogus'", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void AcceptsAnAnnotationTypeShapedAsPrefixValueAndKeepsItRaw()
+    {
+        XliffUnit unit = ReadUnit("""<segment><source><mrk id="m1" type="acme:widget">x</mrk></source></segment>""");
+
+        var start = (AnnotationStartPart)unit.Segments[0].SourceContent.Parts[0];
+        Assert.AreEqual("acme:widget", start.Type);
+    }
+
+    [TestMethod]
+    public void RejectsAnAnnotationTypeWithAnEmptyPrefix()
+    {
+        //Decision: an empty prefix (":value") does not count as shaped prefix:value; it is refused like
+        //any other value outside the three reserved words.
+        XliffFormatException exception = ReadUnitExpectingFailure(
+            """<segment><source><mrk id="m1" type=":widget">x</mrk></source></segment>""");
+
+        Assert.Contains("has the unsupported type ':widget'", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void RejectsAnAnnotationTypeWithAnEmptySuffix()
+    {
+        //Decision: an empty suffix ("acme:") does not count as shaped prefix:value either.
+        XliffFormatException exception = ReadUnitExpectingFailure(
+            """<segment><source><mrk id="m1" type="acme:">x</mrk></source></segment>""");
+
+        Assert.Contains("has the unsupported type 'acme:'", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
     public void ReadsASplitAnnotationAcrossTwoSegments()
     {
         XliffUnit unit = ReadUnit("""
@@ -495,6 +626,22 @@ public sealed class XliffReaderInlineContentTests
         XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><em/></source></segment>""");
 
         Assert.Contains("does not declare the required startRef attribute", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void RejectsACodePointWithoutTheRequiredHexAttribute()
+    {
+        XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><cp/></source></segment>""");
+
+        Assert.Contains("does not declare the required hex attribute", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void TheStreamingPathAlsoRejectsACodePointWithoutTheRequiredHexAttribute()
+    {
+        XliffFormatException exception = ReadUnitsExpectingFailure("""<segment><source><cp/></source></segment>""");
+
+        Assert.Contains("does not declare the required hex attribute", exception.Message, StringComparison.Ordinal);
     }
 
     [TestMethod]
@@ -643,6 +790,73 @@ public sealed class XliffReaderInlineContentTests
         XliffUnit unit = ReadUnit("""<segment><source><ph id="1" type="other" subType="myTool:widget"/></source></segment>""");
 
         Assert.AreEqual("myTool:widget", ((PlaceholderPart)unit.Segments[0].SourceContent.Parts.Single()).SubType);
+    }
+
+    [TestMethod]
+    public void RejectsAnInvalidCanCopyValue()
+    {
+        XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><ph id="1" canCopy="maybe"/></source></segment>""");
+
+        Assert.Contains("has the canCopy value 'maybe'; expected yes or no", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void RejectsAnInvalidCanDeleteValue()
+    {
+        XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><ph id="1" canDelete="maybe"/></source></segment>""");
+
+        Assert.Contains("has the canDelete value 'maybe'; expected yes or no", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void RejectsAnInvalidCanOverlapValue()
+    {
+        XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><sc id="1" canOverlap="maybe"/>x<ec startRef="1"/></source></segment>""");
+
+        Assert.Contains("has the canOverlap value 'maybe'; expected yes or no", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void RejectsAnInvalidCanReorderValue()
+    {
+        XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><ph id="1" canReorder="maybe"/></source></segment>""");
+
+        Assert.Contains("has the canReorder value 'maybe'; expected yes, firstNo or no", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void TheStreamingPathAlsoRejectsAnInvalidCanReorderValue()
+    {
+        XliffFormatException exception = ReadUnitsExpectingFailure("""<segment><source><ph id="1" canReorder="maybe"/></source></segment>""");
+
+        Assert.Contains("has the canReorder value 'maybe'; expected yes, firstNo or no", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void RejectsAnInvalidTranslateValue()
+    {
+        XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><mrk id="m1" translate="maybe">x</mrk></source></segment>""");
+
+        Assert.Contains("has the translate value 'maybe'; expected yes or no", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void RejectsAnInvalidDirValueOnACode()
+    {
+        XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><sc id="1" dir="maybe"/>x<ec startRef="1"/></source></segment>""");
+
+        Assert.Contains("has the dir value 'maybe'; expected ltr, rtl or auto", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void RejectsAnInvalidDirValueOnADataEntry()
+    {
+        XliffFormatException exception = ReadUnitExpectingFailure("""
+            <originalData><data id="d1" dir="maybe">x</data></originalData>
+            <segment><source>hi</source></segment>
+            """);
+
+        Assert.Contains("has the dir value 'maybe'; expected ltr, rtl or auto", exception.Message, StringComparison.Ordinal);
     }
 
     [TestMethod]

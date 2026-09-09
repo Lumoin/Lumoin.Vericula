@@ -920,10 +920,13 @@ public static partial class XliffWriter
 
     /// <summary>
     /// Yields the per-field problems of one content's parts: an id, startRef, dataRef or copyOf that is
-    /// not an XML name token (<see cref="NameTokenProblems"/>), and a disp, equiv, subType, copyOf,
-    /// value, ref or annotation type that contains a character XML cannot carry
+    /// not an XML name token (<see cref="NameTokenProblems"/>), a disp, equiv, subType, copyOf, value,
+    /// ref or annotation type that contains a character XML cannot carry
     /// (<see cref="XmlTextProblems"/>) — these attribute values cannot be <c>cp</c>-encoded the way
-    /// text parts and original data are, so the writer refuses them instead (5.4).
+    /// text parts and original data are, so the writer refuses them instead (5.4) — and a non-isolated
+    /// end code that carries an <see cref="EndCodePart.Id"/> (XLIFF 2.1 §4.2.3.5: <c>id</c> is used if
+    /// and only if <c>isolated="yes"</c>; the writer would otherwise silently drop it, matching what the
+    /// reader used to do before this refusal existed there too).
     /// </summary>
     private static IEnumerable<string> InlinePartFieldProblems(ImmutableArray<InlinePart> parts, string what)
     {
@@ -979,6 +982,11 @@ public static partial class XliffWriter
                     foreach(string problem in idProblems)
                     {
                         yield return problem;
+                    }
+
+                    if(!end.Isolated && end.Id is not null)
+                    {
+                        yield return $"An end code in {what} carries an id but is not isolated; XLIFF 2.1 §4.2.3.5 uses id if and only if isolated=\"yes\".";
                     }
 
                     foreach(string problem in CodeReferenceProblems(end.DataRef, end.CopyOf, what))

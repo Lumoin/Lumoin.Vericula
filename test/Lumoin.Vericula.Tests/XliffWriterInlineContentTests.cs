@@ -795,4 +795,17 @@ public sealed class XliffWriterInlineContentTests
 
         AssertUnitRejected(unit, "an annotation type in the source of unit 'u' contains a character XML cannot carry");
     }
+
+    [TestMethod]
+    public void RejectsANonIsolatedEndCodeThatCarriesAnId()
+    {
+        //XLIFF 2.1 §4.2.3.5: id is used if and only if isolated="yes". The model can express a
+        //non-isolated EndCodePart with a non-null Id even though WriteEndCode would then silently drop
+        //it (it only ever writes StartRef on that branch), so Problems() must refuse this instead of
+        //quietly writing an <ec startRef="..."/> that loses the stray id, mirroring the reader's own
+        //refusal of the same shape.
+        XliffUnit unit = UnitOf(Sc("sp1"), new InlineTextPart("x"), Ec("sp1") with { Id = "stray" });
+
+        AssertUnitRejected(unit, "carries an id but is not isolated");
+    }
 }

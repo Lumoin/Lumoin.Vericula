@@ -470,7 +470,8 @@ public static partial class XliffReader
     /// Parses an <c>&lt;ec&gt;</c> element (the end half of a split spanning code) into an
     /// <see cref="EndCodePart"/>: when <c>isolated="yes"</c> it must carry its own <c>id</c> and no
     /// <c>startRef</c>; otherwise it must carry <c>startRef</c> naming a start still open on this side,
-    /// which it then closes (5.3.2).
+    /// which it then closes, and must not carry <c>id</c> (5.3.2; XLIFF 2.1 §4.2.3.5: <c>id</c> is used
+    /// if and only if <c>isolated="yes"</c>).
     /// </summary>
     private static InlineParseState AppendEndCode(XElement element, ImmutableArray<InlinePart>.Builder builder, InlineParseState state, InlineParseContext context)
     {
@@ -510,6 +511,11 @@ public static partial class XliffReader
             if(string.IsNullOrWhiteSpace(startRefAttribute))
             {
                 throw WithLocation(new XliffFormatException($"A <ec> element in unit '{context.UnitId}' does not declare the required startRef attribute."), element);
+            }
+
+            if(idAttribute is not null)
+            {
+                throw WithLocation(new XliffFormatException($"A <ec> element in unit '{context.UnitId}' declares an id attribute without isolated=\"yes\"; XLIFF 2.1 §4.2.3.5 uses id if and only if isolated=\"yes\"."), element);
             }
 
             state = ResolveAndCloseStart(state, startRefAttribute, context.UnitId, element);
@@ -586,15 +592,21 @@ public static partial class XliffReader
 
     /// <summary>
     /// Parses the attributes <c>&lt;mrk&gt;</c> and <c>&lt;sm&gt;</c> share: <c>type</c> (defaulting to
-    /// <see cref="WellKnownXliffAttributeValues.Generic"/>; a value outside the three reserved words and
-    /// not shaped as <c>prefix:value</c> is accepted as-is, since 5.3 leaves this leniency unenforced),
-    /// <c>translate</c>, <c>ref</c> and <c>value</c>, refusing a <c>comment</c> annotation that carries
-    /// neither <c>value</c> nor <c>ref</c>, or both of them (XLIFF 2.1 §4.7.3.1.3: "if and only if the
-    /// value attribute is not present, the ref attribute MUST be present").
+    /// <see cref="WellKnownXliffAttributeValues.Generic"/>; a value outside the three reserved words
+    /// must be shaped as <c>prefix:value</c>, with both halves non-empty, or it is refused, XLIFF 2.1
+    /// §4.3.1.40 and §4.7.3.1.4), <c>translate</c>, <c>ref</c> and <c>value</c>, refusing a
+    /// <c>comment</c> annotation that carries neither <c>value</c> nor <c>ref</c>, or both of them
+    /// (XLIFF 2.1 §4.7.3.1.3: "if and only if the value attribute is not present, the ref attribute
+    /// MUST be present").
     /// </summary>
     private static (string Type, bool? Translate, string? Ref, string? Value) ParseAnnotationAttributes(XElement element, string id, string unitId)
     {
         string type = element.Attribute(WellKnownXliffAttributes.Type)?.Value ?? WellKnownXliffAttributeValues.Generic;
+        if(!WellKnownXliffAttributeValues.IsGeneric(type) && !WellKnownXliffAttributeValues.IsTerm(type) && !WellKnownXliffAttributeValues.IsComment(type) && !IsPrefixedAnnotationType(type))
+        {
+            throw WithLocation(new XliffFormatException($"The annotation '{id}' in unit '{unitId}' has the unsupported type '{type}'; XLIFF 2.1 §4.3.1.40 and §4.7.3.1.4 restrict it to generic, term, comment or a prefix:value pair with both halves non-empty."), element);
+        }
+
         bool? translate = ParseNullableYesNo(element.Attribute(WellKnownXliffAttributes.Translate)?.Value, unitId, element, WellKnownXliffAttributes.Translate);
         string? refValue = element.Attribute(WellKnownXliffAttributes.Ref)?.Value;
         string? value = element.Attribute(WellKnownXliffAttributes.Value)?.Value;
@@ -609,6 +621,19 @@ public static partial class XliffReader
         }
 
         return (type, translate, refValue, value);
+    }
+
+    /// <summary>
+    /// Checks whether an annotation <c>type</c> value is shaped <c>prefix:value</c> (XLIFF 2.1 §4.3.1.40,
+    /// §4.7.3.1.4): one colon, with at least one character on each side of it. A value with an empty
+    /// prefix (<c>":value"</c>) or an empty suffix (<c>"prefix:"</c>) does not count as shaped this way
+    /// and is refused by the caller along with any value that carries no colon at all.
+    /// </summary>
+    private static bool IsPrefixedAnnotationType(string value)
+    {
+        int colon = value.IndexOf(':');
+
+        return colon > 0 && colon < value.Length - 1;
     }
 
     /// <summary>
