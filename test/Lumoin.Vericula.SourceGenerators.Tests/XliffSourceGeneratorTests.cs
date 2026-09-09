@@ -1581,6 +1581,7 @@ public sealed class XliffSourceGeneratorTests
     [TestMethod]
     public void AnUnrecognizedCoreNamespaceElementInsideContentIsRefusedAsVfx300()
     {
+        //Twin: XliffReaderInlineContentTests.cs RejectsAnUnrecognizedCoreNamespaceElementInsideContent (step 6).
         var result = RunGenerator("""
             <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
               <file id="wallet">
@@ -1760,6 +1761,186 @@ public sealed class XliffSourceGeneratorTests
             """, "Bootstrap", TestContext.CancellationToken);
 
         AssertParseFailure(result, "has the translate value 'maybe'; expected yes or no.");
+    }
+
+    [TestMethod]
+    public void AMalformedCanCopyValueIsRefusedAsVfx300()
+    {
+        //Step 6a: canCopy/canDelete/canOverlap/canReorder/dir were never read at all before this, so a
+        //malformed value compiled through the generator while the reader refused the same document.
+        //Twin: XliffReaderInlineContentTests.cs RejectsAnInvalidCanCopyValue.
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="BadCanCopy">
+                  <segment>
+                    <source><ph id="1" canCopy="maybe"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "has the canCopy value 'maybe'; expected yes or no.");
+    }
+
+    [TestMethod]
+    public void AMalformedCanDeleteValueIsRefusedAsVfx300()
+    {
+        //Twin: XliffReaderInlineContentTests.cs RejectsAnInvalidCanDeleteValue.
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="BadCanDelete">
+                  <segment>
+                    <source><ph id="1" canDelete="maybe"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "has the canDelete value 'maybe'; expected yes or no.");
+    }
+
+    [TestMethod]
+    public void AMalformedCanOverlapValueIsRefusedAsVfx300()
+    {
+        //Twin: XliffReaderInlineContentTests.cs RejectsAnInvalidCanOverlapValue.
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="BadCanOverlap">
+                  <segment>
+                    <source><sc id="1" canOverlap="maybe"/>x<ec startRef="1"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "has the canOverlap value 'maybe'; expected yes or no.");
+    }
+
+    [TestMethod]
+    public void AMalformedCanReorderValueIsRefusedAsVfx300()
+    {
+        //Twin: XliffReaderInlineContentTests.cs RejectsAnInvalidCanReorderValue.
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="BadCanReorder">
+                  <segment>
+                    <source><ph id="1" canReorder="maybe"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "has the canReorder value 'maybe'; expected yes, firstNo or no.");
+    }
+
+    [TestMethod]
+    public void AMalformedDirValueOnACodeIsRefusedAsVfx300()
+    {
+        //Twin: XliffReaderInlineContentTests.cs RejectsAnInvalidDirValueOnACode.
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="BadDir">
+                  <segment>
+                    <source><sc id="1" dir="maybe"/>x<ec startRef="1"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "has the dir value 'maybe'; expected ltr, rtl or auto.");
+    }
+
+    [TestMethod]
+    public void AMalformedDirValueOnADataEntryIsRefusedAsVfx300()
+    {
+        //Twin: XliffReaderInlineContentTests.cs RejectsAnInvalidDirValueOnADataEntry.
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="BadDataDir">
+                  <originalData><data id="d1" dir="maybe">x</data></originalData>
+                  <segment>
+                    <source>hi</source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "has the dir value 'maybe'; expected ltr, rtl or auto.");
+    }
+
+    [TestMethod]
+    public void APlaceholderIdThatIsNotAnXmlNameTokenIsRefusedAsVfx300()
+    {
+        //Step 6a: TryRequireAndRegisterId only ever checked for null/whitespace, so an id shaped like
+        //"not a token" (containing white space) compiled through the generator while the reader's
+        //RequiredId/RequireNameToken refused the same document.
+        //Twin: XliffReaderInlineContentTests.cs (RequiredId's NMTOKEN check, exercised directly for
+        //<ec id> by RejectsAnIsolatedEndCodeWithAnInvalidIdAndCarriesLineAndPosition).
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="BadPlaceholderId">
+                  <segment>
+                    <source><ph id="not a token"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "The <ph> id 'not a token' is not an XML name token.");
+    }
+
+    [TestMethod]
+    public void AnIsolatedEndCodeWithAnInvalidIdIsRefusedAsVfx300()
+    {
+        //Twin: XliffReaderInlineContentTests.cs RejectsAnIsolatedEndCodeWithAnInvalidIdAndCarriesLineAndPosition.
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="BadIsolatedEcId">
+                  <segment>
+                    <source><ec id="not a token" isolated="yes"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "The <ec> id 'not a token' is not an XML name token.");
+    }
+
+    [TestMethod]
+    public void ADataIdThatIsNotAnXmlNameTokenIsRefusedAsVfx300()
+    {
+        //Step 6a: the data-id check inside TryParseOriginalData only ever checked for null/whitespace.
+        //Twin: XliffReaderInlineContentTests.cs (RequiredId's NMTOKEN check, via ParseOriginalData).
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="BadDataId">
+                  <originalData><data id="not a token">a</data></originalData>
+                  <segment>
+                    <source>x</source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "The <data> id 'not a token' is not an XML name token.");
     }
 
     [TestMethod]

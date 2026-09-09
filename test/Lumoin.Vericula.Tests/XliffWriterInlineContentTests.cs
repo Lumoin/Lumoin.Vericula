@@ -808,4 +808,48 @@ public sealed class XliffWriterInlineContentTests
 
         AssertUnitRejected(unit, "carries an id but is not isolated");
     }
+
+    [TestMethod]
+    public void RejectsAnAnnotationTypeThatIsNeitherReservedNorShapedAsPrefixValue()
+    {
+        //XLIFF 2.1 §4.3.1.40, §4.7.3.1.4: the model can carry an AnnotationStartPart.Type the reader
+        //would refuse to read back (for example one built by hand, or round-tripped from a source that
+        //validates less strictly), so Problems() must refuse it here too, mirroring the reader's own
+        //ParseAnnotationAttributes refusal.
+        //Twin: XliffReaderInlineContentTests.cs RejectsAnAnnotationTypeThatIsNeitherReservedNorShapedAsPrefixValue.
+        XliffUnit unit = UnitOf(Mrk("m", type: "bogus"), new InlineTextPart("x"), MrkEnd("m"));
+
+        AssertUnitRejected(unit, "is 'bogus', which is neither generic, term, comment nor shaped prefix:value");
+    }
+
+    [TestMethod]
+    public void AcceptsAnAnnotationTypeShapedAsPrefixValue()
+    {
+        //Companion acceptance test: a prefix:value type must not be wrongly refused by the new check.
+        XliffUnit unit = UnitOf(Mrk("m", type: "acme:widget"), new InlineTextPart("x"), MrkEnd("m"));
+
+        XliffDocument document = Read(WriteToBytes(DocumentOf(unit)));
+        var start = (AnnotationStartPart)document.Files[0].Units.Single().Segments[0].SourceContent.Parts[0];
+        Assert.AreEqual("acme:widget", start.Type);
+    }
+
+    [TestMethod]
+    public void RejectsACommentAnnotationWithNeitherValueNorRef()
+    {
+        //XLIFF 2.1 §4.7.3.1.3: "if and only if the value attribute is not present, the ref attribute
+        //MUST be present" - a comment annotation with neither must be refused, mirroring the reader.
+        //Twin: XliffReaderInlineContentTests.cs RejectsACommentAnnotationWithNeitherValueNorRef.
+        XliffUnit unit = UnitOf(Mrk("m", type: "comment"), new InlineTextPart("x"), MrkEnd("m"));
+
+        AssertUnitRejected(unit, "has neither a value nor a ref attribute");
+    }
+
+    [TestMethod]
+    public void RejectsACommentAnnotationWithBothValueAndRef()
+    {
+        //Twin: XliffReaderInlineContentTests.cs RejectsACommentAnnotationWithBothValueAndRef.
+        XliffUnit unit = UnitOf(Mrk("m", type: "comment", refValue: "#n=n1", value: "v"), new InlineTextPart("x"), MrkEnd("m"));
+
+        AssertUnitRejected(unit, "has both a value and a ref attribute");
+    }
 }

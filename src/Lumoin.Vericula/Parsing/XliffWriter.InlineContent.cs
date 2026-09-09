@@ -923,10 +923,16 @@ public static partial class XliffWriter
     /// not an XML name token (<see cref="NameTokenProblems"/>), a disp, equiv, subType, copyOf, value,
     /// ref or annotation type that contains a character XML cannot carry
     /// (<see cref="XmlTextProblems"/>) — these attribute values cannot be <c>cp</c>-encoded the way
-    /// text parts and original data are, so the writer refuses them instead (5.4) — and a non-isolated
+    /// text parts and original data are, so the writer refuses them instead (5.4) — a non-isolated
     /// end code that carries an <see cref="EndCodePart.Id"/> (XLIFF 2.1 §4.2.3.5: <c>id</c> is used if
     /// and only if <c>isolated="yes"</c>; the writer would otherwise silently drop it, matching what the
-    /// reader used to do before this refusal existed there too).
+    /// reader used to do before this refusal existed there too), an <see cref="AnnotationStartPart.Type"/>
+    /// that is neither <c>generic</c>, <c>term</c>, <c>comment</c> nor shaped <c>prefix:value</c> (XLIFF
+    /// 2.1 §4.3.1.40, §4.7.3.1.4, the same shape <see cref="XliffReader.IsPrefixedAnnotationType"/>
+    /// checks on read), and a <c>comment</c> annotation whose <see cref="AnnotationStartPart.Value"/> and
+    /// <see cref="AnnotationStartPart.Ref"/> are both null or both non-null (XLIFF 2.1 §4.7.3.1.3) — both
+    /// mirror what the reader already refuses, so the writer cannot produce a document the reader would
+    /// then refuse to read back.
     /// </summary>
     private static IEnumerable<string> InlinePartFieldProblems(ImmutableArray<InlinePart> parts, string what)
     {
@@ -1022,6 +1028,24 @@ public static partial class XliffWriter
                     foreach(string problem in XmlTextProblems(annotationStart.Value, $"an annotation value in {what}"))
                     {
                         yield return problem;
+                    }
+
+                    if(!WellKnownXliffAttributeValues.IsGeneric(annotationStart.Type) && !WellKnownXliffAttributeValues.IsTerm(annotationStart.Type)
+                        && !WellKnownXliffAttributeValues.IsComment(annotationStart.Type) && !XliffReader.IsPrefixedAnnotationType(annotationStart.Type))
+                    {
+                        yield return $"An annotation type in {what} is '{annotationStart.Type}', which is neither generic, term, comment nor shaped prefix:value; XLIFF 2.1 §4.3.1.40 and §4.7.3.1.4 require one of those.";
+                    }
+
+                    if(WellKnownXliffAttributeValues.IsComment(annotationStart.Type))
+                    {
+                        if(annotationStart.Value is null && annotationStart.Ref is null)
+                        {
+                            yield return $"A comment annotation in {what} has neither a value nor a ref attribute; XLIFF 2.1 §4.7.3.1.3 requires one.";
+                        }
+                        else if(annotationStart.Value is not null && annotationStart.Ref is not null)
+                        {
+                            yield return $"A comment annotation in {what} has both a value and a ref attribute; XLIFF 2.1 §4.7.3.1.3 allows only one.";
+                        }
                     }
 
                     break;

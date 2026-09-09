@@ -43,6 +43,17 @@ internal static class WellKnownXliffAttributeValues
     /// <returns><see langword="true"/> if the value is no; otherwise, <see langword="false"/>.</returns>
     public static bool IsNo(string? value) => string.Equals(value, No, StringComparison.Ordinal);
 
+    /// <summary>The UTF-8 source literal of <see cref="FirstNo"/>.</summary>
+    public static ReadOnlySpan<byte> FirstNoUtf8 => "firstNo"u8;
+
+    /// <summary>The <c>canReorder</c> value forbidding the code from being the first reordered item per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#canReorder">XLIFF 2.1, canReorder</see>.</summary>
+    public static readonly string FirstNo = Utf8Constants.ToInternedString(FirstNoUtf8);
+
+    /// <summary>Determines if a <c>canReorder</c> attribute value is <see cref="FirstNo"/>.</summary>
+    /// <param name="value">The attribute value, or null when the attribute is absent.</param>
+    /// <returns><see langword="true"/> if the value is firstNo; otherwise, <see langword="false"/>.</returns>
+    public static bool IsFirstNo(string? value) => string.Equals(value, FirstNo, StringComparison.Ordinal);
+
     /// <summary>The UTF-8 source literal of <see cref="Fmt"/>.</summary>
     public static ReadOnlySpan<byte> FmtUtf8 => "fmt"u8;
 
@@ -141,6 +152,39 @@ internal static class WellKnownXliffAttributeValues
     /// <param name="value">The attribute value.</param>
     /// <returns><see langword="true"/> if the value is comment; otherwise, <see langword="false"/>.</returns>
     public static bool IsComment(string? value) => string.Equals(value, Comment, StringComparison.Ordinal);
+
+    /// <summary>The UTF-8 source literal of <see cref="Ltr"/>.</summary>
+    public static ReadOnlySpan<byte> LtrUtf8 => "ltr"u8;
+
+    /// <summary>The left-to-right value of a <c>dir</c> attribute per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#dir">XLIFF 2.1, dir</see>.</summary>
+    public static readonly string Ltr = Utf8Constants.ToInternedString(LtrUtf8);
+
+    /// <summary>Determines if a <c>dir</c> attribute value is <see cref="Ltr"/>.</summary>
+    /// <param name="value">The attribute value, or null when the attribute is absent.</param>
+    /// <returns><see langword="true"/> if the value is ltr; otherwise, <see langword="false"/>.</returns>
+    public static bool IsLtr(string? value) => string.Equals(value, Ltr, StringComparison.Ordinal);
+
+    /// <summary>The UTF-8 source literal of <see cref="Rtl"/>.</summary>
+    public static ReadOnlySpan<byte> RtlUtf8 => "rtl"u8;
+
+    /// <summary>The right-to-left value of a <c>dir</c> attribute per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#dir">XLIFF 2.1, dir</see>.</summary>
+    public static readonly string Rtl = Utf8Constants.ToInternedString(RtlUtf8);
+
+    /// <summary>Determines if a <c>dir</c> attribute value is <see cref="Rtl"/>.</summary>
+    /// <param name="value">The attribute value, or null when the attribute is absent.</param>
+    /// <returns><see langword="true"/> if the value is rtl; otherwise, <see langword="false"/>.</returns>
+    public static bool IsRtl(string? value) => string.Equals(value, Rtl, StringComparison.Ordinal);
+
+    /// <summary>The UTF-8 source literal of <see cref="Auto"/>.</summary>
+    public static ReadOnlySpan<byte> AutoUtf8 => "auto"u8;
+
+    /// <summary>The Unicode-bidirectional-algorithm value of a <c>dir</c> attribute per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#dir">XLIFF 2.1, dir</see>; also <c>data</c>'s own default (XLIFF 2.1 §4.3.1.12).</summary>
+    public static readonly string Auto = Utf8Constants.ToInternedString(AutoUtf8);
+
+    /// <summary>Determines if a <c>dir</c> attribute value is <see cref="Auto"/>.</summary>
+    /// <param name="value">The attribute value, or null when the attribute is absent.</param>
+    /// <returns><see langword="true"/> if the value is auto; otherwise, <see langword="false"/>.</returns>
+    public static bool IsAuto(string? value) => string.Equals(value, Auto, StringComparison.Ordinal);
 
     /// <summary>The UTF-8 source literal of <see cref="SubTypeBold"/>.</summary>
     public static ReadOnlySpan<byte> SubTypeBoldUtf8 => "xlf:b"u8;

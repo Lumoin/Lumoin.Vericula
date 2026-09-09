@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Globalization;
 using System.Text;
+using System.Xml;
 using System.Xml.Linq;
 
 namespace Lumoin.Vericula.SourceGenerators;
@@ -15,9 +16,12 @@ namespace Lumoin.Vericula.SourceGenerators;
 /// The generator cannot reference the core library, so this is a small, purpose-built renderer rather
 /// than a full model: it keeps only what rendering and the structural checks below need (a code's raw
 /// <c>type</c>/<c>subType</c> strings, its resolved original-data text, its <c>disp</c> and
-/// <c>equiv</c>), not the full attribute surface the core reader carries (<c>canCopy</c>,
-/// <c>canReorder</c>, <c>copyOf</c>, <c>subFlows</c>, <c>dir</c> and the like), none of which affects a
-/// rendered string.
+/// <c>equiv</c>), not the full attribute surface the core reader carries as record fields
+/// (<c>canCopy</c>, <c>canDelete</c>, <c>canOverlap</c>, <c>canReorder</c>, <c>dir</c> and the like).
+/// Their values are still validated the way the reader's <c>Parse*</c> helpers validate them (a
+/// malformed one still fails VFX300), just discarded once well-formed, since none of them affects a
+/// rendered string; only <c>copyOf</c> and <c>subFlows</c> are truly unvalidated free strings, matching
+/// the reader, which does not validate them either.
 /// </remarks>
 public sealed partial class XliffSourceGenerator
 {
@@ -347,6 +351,27 @@ public sealed partial class XliffSourceGenerator
             return (false, state, dataFailure);
         }
 
+        //canCopy, canDelete and canReorder are never read into a RenderPlaceholderPart field (none of
+        //them affects a rendered string, 5.7), but a malformed value must still fail the accessor
+        //(VFX300) the way the reader refuses the same document, or the two paths diverge on what counts
+        //as a well-formed <ph>.
+        (bool canCopyOk, bool _, string? canCopyFailure) = TryParseYesNo(element.Attribute(WellKnownXliffAttributes.CanCopy)?.Value, true, unitId, WellKnownXliffElements.Placeholder, WellKnownXliffAttributes.CanCopy);
+        if(!canCopyOk)
+        {
+            return (false, state, canCopyFailure);
+        }
+
+        (bool canDeleteOk, bool _, string? canDeleteFailure) = TryParseYesNo(element.Attribute(WellKnownXliffAttributes.CanDelete)?.Value, true, unitId, WellKnownXliffElements.Placeholder, WellKnownXliffAttributes.CanDelete);
+        if(!canDeleteOk)
+        {
+            return (false, state, canDeleteFailure);
+        }
+
+        if(!TryParseCanReorder(element.Attribute(WellKnownXliffAttributes.CanReorder)?.Value, unitId, WellKnownXliffElements.Placeholder, out string? canReorderFailure))
+        {
+            return (false, state, canReorderFailure);
+        }
+
         string equiv = element.Attribute(WellKnownXliffAttributes.Equiv)?.Value ?? string.Empty;
         string? disp = element.Attribute(WellKnownXliffAttributes.Disp)?.Value;
         (string markupText, bool isTag) = ResolveCodeText(type, subType, originalDataText, disp, equiv);
@@ -387,6 +412,37 @@ public sealed partial class XliffSourceGenerator
         if(!TryValidateSubType(subType, type, unitId, WellKnownXliffElements.PairedCode, out string? subTypeFailure))
         {
             return (false, state, subTypeFailure);
+        }
+
+        //canCopy, canDelete, canOverlap, canReorder and dir are shared by both halves of a <pc> (table 2,
+        //XLIFF 2.1 §4.7.2.2) but never read into a render part field, the same VFX300-only gate as <ph>'s
+        //above.
+        (bool canCopyOk, bool _, string? canCopyFailure) = TryParseYesNo(element.Attribute(WellKnownXliffAttributes.CanCopy)?.Value, true, unitId, WellKnownXliffElements.PairedCode, WellKnownXliffAttributes.CanCopy);
+        if(!canCopyOk)
+        {
+            return (false, state, canCopyFailure);
+        }
+
+        (bool canDeleteOk, bool _, string? canDeleteFailure) = TryParseYesNo(element.Attribute(WellKnownXliffAttributes.CanDelete)?.Value, true, unitId, WellKnownXliffElements.PairedCode, WellKnownXliffAttributes.CanDelete);
+        if(!canDeleteOk)
+        {
+            return (false, state, canDeleteFailure);
+        }
+
+        (bool canOverlapOk, bool _, string? canOverlapFailure) = TryParseYesNo(element.Attribute(WellKnownXliffAttributes.CanOverlap)?.Value, false, unitId, WellKnownXliffElements.PairedCode, WellKnownXliffAttributes.CanOverlap);
+        if(!canOverlapOk)
+        {
+            return (false, state, canOverlapFailure);
+        }
+
+        if(!TryParseCanReorder(element.Attribute(WellKnownXliffAttributes.CanReorder)?.Value, unitId, WellKnownXliffElements.PairedCode, out string? canReorderFailure))
+        {
+            return (false, state, canReorderFailure);
+        }
+
+        if(!TryParseDirection(element.Attribute(WellKnownXliffAttributes.Dir)?.Value, unitId, WellKnownXliffElements.PairedCode, out string? directionFailure))
+        {
+            return (false, state, directionFailure);
         }
 
         if(!TryResolveDataRef(element.Attribute(WellKnownXliffAttributes.DataRefStart)?.Value, data, unitId, out string? startData, out string? startDataFailure))
@@ -460,6 +516,37 @@ public sealed partial class XliffSourceGenerator
             return (false, state, dataFailure);
         }
 
+        //canCopy, canDelete, canOverlap, canReorder and dir are never read into a render part field, the
+        //same VFX300-only gate as <ph> and <pc> above; <sc>'s canOverlap defaults to true, unlike <pc>'s
+        //shared default of false (5.1).
+        (bool canCopyOk, bool _, string? canCopyFailure) = TryParseYesNo(element.Attribute(WellKnownXliffAttributes.CanCopy)?.Value, true, unitId, WellKnownXliffElements.StartCode, WellKnownXliffAttributes.CanCopy);
+        if(!canCopyOk)
+        {
+            return (false, state, canCopyFailure);
+        }
+
+        (bool canDeleteOk, bool _, string? canDeleteFailure) = TryParseYesNo(element.Attribute(WellKnownXliffAttributes.CanDelete)?.Value, true, unitId, WellKnownXliffElements.StartCode, WellKnownXliffAttributes.CanDelete);
+        if(!canDeleteOk)
+        {
+            return (false, state, canDeleteFailure);
+        }
+
+        if(!TryParseCanReorder(element.Attribute(WellKnownXliffAttributes.CanReorder)?.Value, unitId, WellKnownXliffElements.StartCode, out string? canReorderFailure))
+        {
+            return (false, state, canReorderFailure);
+        }
+
+        (bool canOverlapOk, bool _, string? canOverlapFailure) = TryParseYesNo(element.Attribute(WellKnownXliffAttributes.CanOverlap)?.Value, true, unitId, WellKnownXliffElements.StartCode, WellKnownXliffAttributes.CanOverlap);
+        if(!canOverlapOk)
+        {
+            return (false, state, canOverlapFailure);
+        }
+
+        if(!TryParseDirection(element.Attribute(WellKnownXliffAttributes.Dir)?.Value, unitId, WellKnownXliffElements.StartCode, out string? directionFailure))
+        {
+            return (false, state, directionFailure);
+        }
+
         string equiv = element.Attribute(WellKnownXliffAttributes.Equiv)?.Value ?? string.Empty;
         string? disp = element.Attribute(WellKnownXliffAttributes.Disp)?.Value;
         (string markupText, bool isTag) = ResolveCodeText(type, subType, originalDataText, disp, equiv);
@@ -500,6 +587,11 @@ public sealed partial class XliffSourceGenerator
             if(startRefAttribute is not null)
             {
                 return (false, state, $"An isolated <ec> element in unit '{unitId}' must not declare a startRef attribute; XLIFF 2.1 §4.2.3.5 uses id instead.");
+            }
+
+            if(!TryRequireNameToken(idAttribute, WellKnownXliffElements.EndCode, out string? shapeFailure))
+            {
+                return (false, state, shapeFailure);
             }
 
             if(!TryRegisterId(idAttribute, context, state, unitId, out state, out string? idFailure))
@@ -549,6 +641,36 @@ public sealed partial class XliffSourceGenerator
         if(!TryResolveDataRef(element.Attribute(WellKnownXliffAttributes.DataRef)?.Value, data, unitId, out string? originalDataText, out string? dataFailure))
         {
             return (false, state, dataFailure);
+        }
+
+        //canCopy, canDelete, canOverlap, canReorder and dir are never read into a render part field, the
+        //same VFX300-only gate as <ph>, <pc> and <sc> above.
+        (bool canCopyOk, bool _, string? canCopyFailure) = TryParseYesNo(element.Attribute(WellKnownXliffAttributes.CanCopy)?.Value, true, unitId, WellKnownXliffElements.EndCode, WellKnownXliffAttributes.CanCopy);
+        if(!canCopyOk)
+        {
+            return (false, state, canCopyFailure);
+        }
+
+        (bool canDeleteOk, bool _, string? canDeleteFailure) = TryParseYesNo(element.Attribute(WellKnownXliffAttributes.CanDelete)?.Value, true, unitId, WellKnownXliffElements.EndCode, WellKnownXliffAttributes.CanDelete);
+        if(!canDeleteOk)
+        {
+            return (false, state, canDeleteFailure);
+        }
+
+        (bool canOverlapOk, bool _, string? canOverlapFailure) = TryParseYesNo(element.Attribute(WellKnownXliffAttributes.CanOverlap)?.Value, true, unitId, WellKnownXliffElements.EndCode, WellKnownXliffAttributes.CanOverlap);
+        if(!canOverlapOk)
+        {
+            return (false, state, canOverlapFailure);
+        }
+
+        if(!TryParseCanReorder(element.Attribute(WellKnownXliffAttributes.CanReorder)?.Value, unitId, WellKnownXliffElements.EndCode, out string? canReorderFailure))
+        {
+            return (false, state, canReorderFailure);
+        }
+
+        if(!TryParseDirection(element.Attribute(WellKnownXliffAttributes.Dir)?.Value, unitId, WellKnownXliffElements.EndCode, out string? directionFailure))
+        {
+            return (false, state, directionFailure);
         }
 
         string equiv = element.Attribute(WellKnownXliffAttributes.Equiv)?.Value ?? string.Empty;
@@ -684,8 +806,10 @@ public sealed partial class XliffSourceGenerator
 
     /// <summary>
     /// Checks whether an annotation <c>type</c> value is shaped <c>prefix:value</c> (XLIFF 2.1 §4.3.1.40,
-    /// §4.7.3.1.4): one colon, with at least one character on each side of it. Mirrors the core reader's
-    /// <c>IsPrefixedAnnotationType</c>.
+    /// §4.7.3.1.4): at least one colon, with at least one character before the first colon and at least
+    /// one after it. Only the first colon separates prefix from value; the spec allows the value half to
+    /// be "any string defined by the authority", so a later colon inside it (<c>"acme:a:b"</c>) does not
+    /// disqualify the value. Mirrors the core reader's <c>IsPrefixedAnnotationType</c>.
     /// </summary>
     private static bool IsPrefixedAnnotationType(string value)
     {
@@ -709,12 +833,41 @@ public sealed partial class XliffSourceGenerator
             return (false, string.Empty, state, $"A <{elementName}> element in unit '{unitId}' does not declare the required id attribute.");
         }
 
+        if(!TryRequireNameToken(id, elementName, out string? shapeFailure))
+        {
+            return (false, string.Empty, state, shapeFailure);
+        }
+
         if(!TryRegisterId(id, context, state, unitId, out InlineSideState newState, out string? failure))
         {
             return (false, string.Empty, state, failure);
         }
 
         return (true, id, newState, null);
+    }
+
+    /// <summary>
+    /// Checks that <paramref name="id"/> is a well-formed XML NMTOKEN, per XLIFF 2.1 §4.3.1.21 id's value
+    /// description, mirroring the core reader's <c>RequireNameToken</c>: an id shape the reader refuses
+    /// (for example one containing white space) must fail the generator too, rather than compiling
+    /// through into an accessor whose document the CLI compile path would then refuse.
+    /// </summary>
+    private static bool TryRequireNameToken(string id, string elementName, out string? failure)
+    {
+        try
+        {
+            XmlConvert.VerifyNMTOKEN(id);
+        }
+        catch(XmlException)
+        {
+            failure = $"The <{elementName}> id '{id}' is not an XML name token.";
+
+            return false;
+        }
+
+        failure = null;
+
+        return true;
     }
 
     /// <summary>
@@ -772,6 +925,67 @@ public sealed partial class XliffSourceGenerator
             _ when WellKnownXliffAttributeValues.IsNo(value) => (true, false, null),
             _ => (false, null, $"A <{elementName}> element in unit '{unitId}' has the {attributeName} value '{value}'; expected yes or no.")
         };
+    }
+
+    /// <summary>
+    /// Validates a code's <c>canReorder</c> attribute (XLIFF 2.1 §4.3.1.5): absent, <c>yes</c>,
+    /// <c>firstNo</c> and <c>no</c> are all well-formed; any other value is refused. Mirrors the core
+    /// reader's <c>ParseCanReorder</c>, except the generator has no field to put the parsed value in
+    /// (5.7's own remarks: <c>canReorder</c> never affects a rendered string) — only whether the
+    /// attribute is well-formed gates the accessor (VFX300), so this reports success or failure alone.
+    /// </summary>
+    private static bool TryParseCanReorder(string? value, string unitId, string elementName, out string? failure)
+    {
+        failure = value switch
+        {
+            null => null,
+            _ when WellKnownXliffAttributeValues.IsYes(value) => null,
+            _ when WellKnownXliffAttributeValues.IsFirstNo(value) => null,
+            _ when WellKnownXliffAttributeValues.IsNo(value) => null,
+            _ => $"A <{elementName}> element in unit '{unitId}' has the canReorder value '{value}'; expected yes, firstNo or no."
+        };
+
+        return failure is null;
+    }
+
+    /// <summary>
+    /// Validates a code's <c>dir</c> attribute: absent, <c>ltr</c>, <c>rtl</c> and <c>auto</c> are all
+    /// well-formed; any other value is refused. Mirrors the core reader's <c>ParseDirection</c>, except
+    /// the generator discards the parsed value the same way <see cref="TryParseCanReorder"/> does.
+    /// </summary>
+    private static bool TryParseDirection(string? value, string unitId, string elementName, out string? failure)
+    {
+        failure = value switch
+        {
+            null => null,
+            _ when WellKnownXliffAttributeValues.IsLtr(value) => null,
+            _ when WellKnownXliffAttributeValues.IsRtl(value) => null,
+            _ when WellKnownXliffAttributeValues.IsAuto(value) => null,
+            _ => $"A <{elementName}> element in unit '{unitId}' has the dir value '{value}'; expected ltr, rtl or auto."
+        };
+
+        return failure is null;
+    }
+
+    /// <summary>
+    /// Validates a <c>&lt;data&gt;</c> element's <c>dir</c> attribute: absent, <c>ltr</c>, <c>rtl</c> and
+    /// <c>auto</c> are all well-formed; any other value is refused. Mirrors the core reader's
+    /// <c>ParseDataDirection</c> (its own default is <c>auto</c> rather than the inherited default every
+    /// other <c>dir</c> has, XLIFF 2.1 §4.3.1.12, which does not affect this validation either way), and
+    /// discards the parsed value the same way <see cref="TryParseDirection"/> does.
+    /// </summary>
+    private static bool TryParseDataDirection(string? value, string unitId, out string? failure)
+    {
+        failure = value switch
+        {
+            null => null,
+            _ when WellKnownXliffAttributeValues.IsLtr(value) => null,
+            _ when WellKnownXliffAttributeValues.IsRtl(value) => null,
+            _ when WellKnownXliffAttributeValues.IsAuto(value) => null,
+            _ => $"A <{WellKnownXliffElements.Data}> element in unit '{unitId}' has the dir value '{value}'; expected ltr, rtl or auto."
+        };
+
+        return failure is null;
     }
 
     /// <summary>Parses a code's <c>type</c> attribute (XLIFF 2.1 §4.3.1.40): absent means null, and any value other than the six reserved words is refused.</summary>
@@ -1028,10 +1242,12 @@ public sealed partial class XliffSourceGenerator
     /// Reads the unit's <c>&lt;originalData&gt;</c> element, if any, into a lookup from a
     /// <c>&lt;data&gt;</c> id to its decoded text. XLIFF 2.1 §4.2.2.5 allows at most one
     /// <c>&lt;originalData&gt;</c> per unit; a second one is refused, mirroring the core reader's
-    /// <c>ParseOriginalData</c>. A <c>&lt;data&gt;</c> entry with no id can never be referenced by a
-    /// <c>dataRef</c>, so it is refused too, rather than silently dropped (5.3.2, step 6 part 2 closes
-    /// this gap against the reader's <c>RequiredId</c>); an entry no code references is still simply
-    /// dropped, with no separate filtering step.
+    /// <c>ParseOriginalData</c>. A <c>&lt;data&gt;</c> entry with no id, or an id that is not a
+    /// well-formed XML NMTOKEN, can never be referenced by a <c>dataRef</c>, so it is refused too, rather
+    /// than silently dropped (5.3.2, step 6 closes this gap against the reader's <c>RequiredId</c>); an
+    /// entry's <c>dir</c> is validated the same way (step 6) but discarded, since it is never read into
+    /// <paramref name="data"/>'s decoded text; an entry no code references is still simply dropped, with
+    /// no separate filtering step.
     /// </summary>
     /// <param name="unitElement">The <c>&lt;unit&gt;</c> element.</param>
     /// <param name="unitId">The unit's id, for failure messages.</param>
@@ -1086,10 +1302,31 @@ public sealed partial class XliffSourceGenerator
                 return false;
             }
 
+            //Mirrors the reader's RequiredId, which folds this NMTOKEN check into the same call that
+            //produced dataId there; a malformed but present id (for example one containing white space)
+            //must fail the accessor the same way, not compile through into a document the reader would
+            //then refuse.
+            if(!TryRequireNameToken(dataId, WellKnownXliffElements.Data, out failure))
+            {
+                data = ImmutableDictionary<string, string>.Empty;
+
+                return false;
+            }
+
             if(builder.ContainsKey(dataId))
             {
                 data = ImmutableDictionary<string, string>.Empty;
                 failure = $"Duplicate <data> id '{dataId}' in unit '{unitId}'; XLIFF 2.1 §4.3.1.21 requires data ids to be unique within their unit.";
+
+                return false;
+            }
+
+            //dir is never read into the id-to-text lookup (only a code's resolved text matters for
+            //rendering), but a malformed value must still fail the accessor, the same VFX300-only gate
+            //as the codes' own enumerated attributes above.
+            if(!TryParseDataDirection(dataElement.Attribute(WellKnownXliffAttributes.Dir)?.Value, unitId, out failure))
+            {
+                data = ImmutableDictionary<string, string>.Empty;
 
                 return false;
             }

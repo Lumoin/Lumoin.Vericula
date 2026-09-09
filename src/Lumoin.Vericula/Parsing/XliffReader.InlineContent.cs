@@ -625,11 +625,16 @@ public static partial class XliffReader
 
     /// <summary>
     /// Checks whether an annotation <c>type</c> value is shaped <c>prefix:value</c> (XLIFF 2.1 §4.3.1.40,
-    /// §4.7.3.1.4): one colon, with at least one character on each side of it. A value with an empty
-    /// prefix (<c>":value"</c>) or an empty suffix (<c>"prefix:"</c>) does not count as shaped this way
-    /// and is refused by the caller along with any value that carries no colon at all.
+    /// §4.7.3.1.4): at least one colon, with at least one character before the first colon and at least
+    /// one after it. Only the first colon separates prefix from value; the spec allows the value half to
+    /// be "any string defined by the authority", so a later colon inside it (<c>"acme:a:b"</c>) does not
+    /// disqualify the value. A value with an empty prefix (<c>":value"</c>) or an empty suffix
+    /// (<c>"prefix:"</c>) does not count as shaped this way and is refused by the caller along with any
+    /// value that carries no colon at all. Internal rather than private: <see cref="XliffWriter"/>
+    /// reuses it to refuse, at write time, an annotation type the reader would refuse to read back
+    /// (5.4), instead of a third copy of the same one-line predicate in the same assembly.
     /// </summary>
-    private static bool IsPrefixedAnnotationType(string value)
+    internal static bool IsPrefixedAnnotationType(string value)
     {
         int colon = value.IndexOf(':');
 

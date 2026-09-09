@@ -365,6 +365,8 @@ public sealed class XliffReaderInlineContentTests
         //try/catch that wraps RequireNameToken with WithLocation removed would still throw the same
         //XliffFormatException but without Line/Position set, since RequireNameToken itself never
         //touches the element's line info; only the wrapping catches that.
+        //Twin: XliffSourceGeneratorTests.cs AnIsolatedEndCodeWithAnInvalidIdIsRefusedAsVfx300 (step 6a:
+        //the generator's id checks only ever checked for null/whitespace, never NMTOKEN shape).
         XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><ec id="not a token" isolated="yes"/></source></segment>""");
 
         Assert.Contains("is not an XML name token", exception.Message, StringComparison.Ordinal);
@@ -510,6 +512,8 @@ public sealed class XliffReaderInlineContentTests
     [TestMethod]
     public void RejectsACommentAnnotationWithNeitherValueNorRef()
     {
+        //Twin: XliffWriterInlineContentTests.cs RejectsACommentAnnotationWithNeitherValueNorRef (step 6:
+        //Problems() gained the same refusal, closing a round-trip asymmetry a step 6 review found).
         XliffFormatException exception = ReadUnitExpectingFailure(
             """<segment><source><mrk id="m1" type="comment">x</mrk></source></segment>""");
 
@@ -523,7 +527,8 @@ public sealed class XliffReaderInlineContentTests
         //"both value and ref" guard would silently accept a comment annotation carrying both.
         //Twin: XliffSourceGeneratorTests.cs ACommentAnnotationWithBothValueAndRefIsRefusedAsVfx300
         //(step 6 part 2: this gap was found on the generator side while closing the assigned list, since
-        //TryParseAnnotationAttributes only ever checked the "neither" half).
+        //TryParseAnnotationAttributes only ever checked the "neither" half). Also twinned on the writer
+        //side: XliffWriterInlineContentTests.cs RejectsACommentAnnotationWithBothValueAndRef (step 6).
         XliffFormatException exception = ReadUnitExpectingFailure(
             """<segment><source><mrk id="m1" type="comment" value="v" ref="#n=n1">x</mrk></source></segment>""");
 
@@ -549,6 +554,8 @@ public sealed class XliffReaderInlineContentTests
         //XLIFF 2.1 §4.3.1.40, §4.7.3.1.4: a type outside generic/term/comment must be shaped prefix:value.
         //Twin: XliffSourceGeneratorTests.cs
         //AnAnnotationTypeThatIsNeitherReservedNorShapedAsPrefixValueIsRefusedAsVfx300 (step 6 part 2).
+        //Also twinned on the writer side: XliffWriterInlineContentTests.cs
+        //RejectsAnAnnotationTypeThatIsNeitherReservedNorShapedAsPrefixValue (step 6).
         XliffFormatException exception = ReadUnitExpectingFailure(
             """<segment><source><mrk id="m1" type="bogus">x</mrk></source></segment>""");
 
@@ -806,6 +813,8 @@ public sealed class XliffReaderInlineContentTests
     [TestMethod]
     public void RejectsAnInvalidCanCopyValue()
     {
+        //Twin: XliffSourceGeneratorTests.cs AMalformedCanCopyValueIsRefusedAsVfx300 (step 6a: the
+        //generator never read canCopy at all before this, so a malformed value compiled through).
         XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><ph id="1" canCopy="maybe"/></source></segment>""");
 
         Assert.Contains("has the canCopy value 'maybe'; expected yes or no", exception.Message, StringComparison.Ordinal);
@@ -814,6 +823,7 @@ public sealed class XliffReaderInlineContentTests
     [TestMethod]
     public void RejectsAnInvalidCanDeleteValue()
     {
+        //Twin: XliffSourceGeneratorTests.cs AMalformedCanDeleteValueIsRefusedAsVfx300 (step 6a).
         XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><ph id="1" canDelete="maybe"/></source></segment>""");
 
         Assert.Contains("has the canDelete value 'maybe'; expected yes or no", exception.Message, StringComparison.Ordinal);
@@ -822,6 +832,7 @@ public sealed class XliffReaderInlineContentTests
     [TestMethod]
     public void RejectsAnInvalidCanOverlapValue()
     {
+        //Twin: XliffSourceGeneratorTests.cs AMalformedCanOverlapValueIsRefusedAsVfx300 (step 6a).
         XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><sc id="1" canOverlap="maybe"/>x<ec startRef="1"/></source></segment>""");
 
         Assert.Contains("has the canOverlap value 'maybe'; expected yes or no", exception.Message, StringComparison.Ordinal);
@@ -830,6 +841,7 @@ public sealed class XliffReaderInlineContentTests
     [TestMethod]
     public void RejectsAnInvalidCanReorderValue()
     {
+        //Twin: XliffSourceGeneratorTests.cs AMalformedCanReorderValueIsRefusedAsVfx300 (step 6a).
         XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><ph id="1" canReorder="maybe"/></source></segment>""");
 
         Assert.Contains("has the canReorder value 'maybe'; expected yes, firstNo or no", exception.Message, StringComparison.Ordinal);
@@ -881,6 +893,7 @@ public sealed class XliffReaderInlineContentTests
     [TestMethod]
     public void RejectsAnInvalidDirValueOnACode()
     {
+        //Twin: XliffSourceGeneratorTests.cs AMalformedDirValueOnACodeIsRefusedAsVfx300 (step 6a).
         XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><sc id="1" dir="maybe"/>x<ec startRef="1"/></source></segment>""");
 
         Assert.Contains("has the dir value 'maybe'; expected ltr, rtl or auto", exception.Message, StringComparison.Ordinal);
@@ -889,6 +902,7 @@ public sealed class XliffReaderInlineContentTests
     [TestMethod]
     public void RejectsAnInvalidDirValueOnADataEntry()
     {
+        //Twin: XliffSourceGeneratorTests.cs AMalformedDirValueOnADataEntryIsRefusedAsVfx300 (step 6a).
         XliffFormatException exception = ReadUnitExpectingFailure("""
             <originalData><data id="d1" dir="maybe">x</data></originalData>
             <segment><source>hi</source></segment>
@@ -1120,6 +1134,20 @@ public sealed class XliffReaderInlineContentTests
             """<segment><source xmlns:ext="urn:example:ext">Hi <ext:tag/></source></segment>""");
 
         Assert.Contains("from another namespace appears inside inline content", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void RejectsAnUnrecognizedCoreNamespaceElementInsideContent()
+    {
+        //The fallback arm of AppendElement's dispatch (a core-namespace element that is none of the
+        //eight recognized inline elements) had no dedicated reader test before this one, even though its
+        //generator twin (AnUnrecognizedCoreNamespaceElementInsideContentIsRefusedAsVfx300) already
+        //pinned the same message.
+        //Twin: XliffSourceGeneratorTests.cs AnUnrecognizedCoreNamespaceElementInsideContentIsRefusedAsVfx300.
+        XliffFormatException exception = ReadUnitExpectingFailure(
+            """<segment><source>Hello <note>World</note></source></segment>""");
+
+        Assert.Contains("is not a recognized XLIFF inline element", exception.Message, StringComparison.Ordinal);
     }
 
     [TestMethod]
