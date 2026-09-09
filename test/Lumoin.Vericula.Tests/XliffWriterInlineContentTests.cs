@@ -237,7 +237,7 @@ public sealed class XliffWriterInlineContentTests
         <target>Klikkaa <pc id="b1" type="fmt" subType="xlf:b">tästä</pc> nyt.</target>
         </segment>
         <segment id="s2">
-        <source>Start <sc id="sp1" type="ui"/> middle</source>
+        <source>Start <cp hex="0007"/><sc id="sp1" type="ui"/> middle</source>
         <target>Alku keski</target>
         </segment>
         <segment id="s3">
@@ -290,14 +290,26 @@ public sealed class XliffWriterInlineContentTests
         Assert.AreEqual(1, CountOccurrences(xml, "<data id=\"d2\""));
         Assert.Contains("<data id=\"d1\" dir=\"rtl\">", xml);
         Assert.IsFalse(xml.Contains("<data id=\"d2\" dir", StringComparison.Ordinal));
+
+        //Kills XliffWriter.InlineContent.cs (WriteUnit's placement of the WriteOriginalDataElement
+        //call): moving it below the segment loop would still round-trip green (the reader accepts
+        //originalData anywhere among the unit's children, 5.3) but would violate XLIFF 2.1 §4.2.2.5's
+        //unit child-order production, which puts <originalData> after <notes> and before the segments.
+        int notesIndex = xml.IndexOf("<notes>", StringComparison.Ordinal);
+        int originalDataIndex = xml.IndexOf("<originalData>", StringComparison.Ordinal);
+        int segmentIndex = xml.IndexOf("<segment", StringComparison.Ordinal);
+        Assert.IsTrue(notesIndex >= 0 && originalDataIndex >= 0 && segmentIndex >= 0);
+        Assert.IsTrue(notesIndex < originalDataIndex);
+        Assert.IsTrue(originalDataIndex < segmentIndex);
     }
 
     [TestMethod]
     public void WithinOneSegmentTheSourcesDataRefAppearsBeforeTheTargetsOwn()
     {
-        //Kills the mutant that swaps CollectOriginalData's per-segment call order (source, then
-        //target only if present) to target-before-source: both "a" and "b" are fresh here, so a
-        //target-first walk would record "b" before "a", flipping the assertion below.
+        //Kills XliffWriter.InlineContent.cs:415-421 (CollectOriginalData): swapping the per-segment
+        //call order (source, then target only if present) to target-before-source: both "a" and "b"
+        //are fresh here, so a target-first walk would record "b" before "a", flipping the assertion
+        //below.
         XliffUnit unit = ReadDocument(
             """
             <originalData><data id="a">A</data><data id="b">B</data></originalData>
@@ -408,7 +420,7 @@ public sealed class XliffWriterInlineContentTests
     [TestMethod]
     public void EncodesU0003AsACodePoint()
     {
-        XliffUnit unit = UnitOf(new InlineTextPart("ab"));
+        XliffUnit unit = UnitOf(new InlineTextPart("a\u0003b"));
 
         string xml = Encoding.UTF8.GetString(WriteToBytes(DocumentOf(unit)));
 
@@ -454,6 +466,21 @@ public sealed class XliffWriterInlineContentTests
 
         Assert.Contains("<ec id=\"z\" isolated=\"yes\" />", xml);
         AssertUnitsEqual(unit, roundTripped.Files[0].Units[0]);
+    }
+
+    [TestMethod]
+    public void OmitsDirOnANonIsolatedEndCodeEvenWhenDirectionIsSet()
+    {
+        //Kills XliffWriter.InlineContent.cs:245 (WriteEndCode): writing dir unconditionally instead of
+        //only inside the Isolated branch. XLIFF 2.1 §4.2.3.5: dir MAY be used if and only if
+        //isolated="yes"; on a Split, non-isolated ec it MUST NOT appear, even when the model carries a
+        //non-Inherited Direction.
+        XliffUnit unit = UnitOf(Sc("sp1"), new InlineTextPart("x"), Ec("sp1") with { Direction = TextDirection.RightToLeft });
+
+        string xml = Encoding.UTF8.GetString(WriteToBytes(DocumentOf(unit)));
+
+        Assert.Contains("<ec startRef=\"sp1\" />", xml);
+        Assert.IsFalse(xml.Contains(" dir=", StringComparison.Ordinal));
     }
 
     //---- Attribute default omission -----------------------------------------------------------------
@@ -622,10 +649,11 @@ public sealed class XliffWriterInlineContentTests
     [TestMethod]
     public void RejectsASourceThatReusesAnIdAnEarlierSegmentsTargetIntroduced()
     {
-        //Kills the mutant that drops the source-side loop's cross-side check entirely: the
-        //exemption in XLIFF 2.1 §4.3.1.21 only ever runs target-reusing-source, never the other way,
-        //so a later segment's source repeating an id an earlier segment's target introduced (as an
-        //added code) is always a problem, with no sibling relationship to excuse it.
+        //Kills XliffWriter.InlineContent.cs:610 (DuplicateInlineIdProblems, source-side check):
+        //dropping the source-side loop's cross-side check entirely (the "|| targetSeen.Contains(id)"
+        //disjunct). The exemption in XLIFF 2.1 §4.3.1.21 only ever runs target-reusing-source, never
+        //the other way, so a later segment's source repeating an id an earlier segment's target
+        //introduced (as an added code) is always a problem, with no sibling relationship to excuse it.
         var segment1 = new XliffSegment("s1", SegmentKind.Translatable, InlineContent.FromText("a"), InlineContent.Create([Ph("x")]), SegmentState.Initial, null);
         var segment2 = new XliffSegment("s2", SegmentKind.Translatable, InlineContent.Create([Ph("x")]), null, SegmentState.Initial, null);
         var unit = new XliffUnit("u", [segment1, segment2], ImmutableArray<string>.Empty, ImmutableArray<Scope>.Empty, ImmutableDictionary<string, string>.Empty, null);
@@ -661,6 +689,21 @@ public sealed class XliffWriterInlineContentTests
     }
 
     [TestMethod]
+    public void RejectsOriginalDataSharingOneDataRefWithTheSameTextButDifferentDirections()
+    {
+        //Kills XliffWriter.InlineContent.cs (OriginalDataConsistencyProblems): comparing only Text and
+        //not Direction. OriginalData equality (and so the HashSet used to detect a conflict) covers
+        //both, per the "two parts with one DataRef but different OriginalData (text or direction)"
+        //half of orientation 5.4; RejectsConflictingOriginalDataSharingOneDataRef above already covers
+        //the text half.
+        XliffUnit unit = UnitOf(
+            Ph("1", dataRef: "d1", originalData: new OriginalData("same", TextDirection.LeftToRight)),
+            Ph("2", dataRef: "d1", originalData: new OriginalData("same", TextDirection.RightToLeft)));
+
+        AssertUnitRejected(unit, "more than one distinct original data value for the dataRef 'd1'");
+    }
+
+    [TestMethod]
     public void RejectsADataRefNoPartResolvesAnywhereInTheUnit()
     {
         XliffUnit unit = UnitOf(Ph("1", dataRef: "d1"));
@@ -675,7 +718,7 @@ public sealed class XliffWriterInlineContentTests
     {
         XliffUnit unit = UnitOf(Ph("bad id"));
 
-        AssertUnitRejected(unit, "an inline id in the source of unit 'u' is not an XML name token");
+        AssertUnitRejected(unit, "inline id in the source of unit 'u' is not an XML name token");
     }
 
     [TestMethod]
@@ -683,7 +726,7 @@ public sealed class XliffWriterInlineContentTests
     {
         XliffUnit unit = UnitOf(Ph("1", dataRef: "bad ref", originalData: new OriginalData("x")));
 
-        AssertUnitRejected(unit, "a dataRef in the source of unit 'u' is not an XML name token");
+        AssertUnitRejected(unit, "dataRef in the source of unit 'u' is not an XML name token");
     }
 
     [TestMethod]
@@ -691,13 +734,13 @@ public sealed class XliffWriterInlineContentTests
     {
         XliffUnit unit = UnitOf(Ph("1", copyOf: "bad copy"));
 
-        AssertUnitRejected(unit, "a copyOf in the source of unit 'u' is not an XML name token");
+        AssertUnitRejected(unit, "copyOf in the source of unit 'u' is not an XML name token");
     }
 
     [TestMethod]
     public void RejectsAnEquivContainingACharacterXmlCannotCarry()
     {
-        XliffUnit unit = UnitOf(Ph("1", equiv: "badequiv"));
+        XliffUnit unit = UnitOf(Ph("1", equiv: "bad\u0007equiv"));
 
         AssertUnitRejected(unit, "an equiv in the source of unit 'u' contains a character XML cannot carry");
     }
@@ -705,7 +748,7 @@ public sealed class XliffWriterInlineContentTests
     [TestMethod]
     public void RejectsADispContainingACharacterXmlCannotCarry()
     {
-        XliffUnit unit = UnitOf(Ph("1", disp: "baddisp"));
+        XliffUnit unit = UnitOf(Ph("1", disp: "bad\u0007disp"));
 
         AssertUnitRejected(unit, "a disp in the source of unit 'u' contains a character XML cannot carry");
     }
@@ -713,15 +756,26 @@ public sealed class XliffWriterInlineContentTests
     [TestMethod]
     public void RejectsASubTypeContainingACharacterXmlCannotCarry()
     {
-        XliffUnit unit = UnitOf(Ph("1", type: InlineCodeType.Other, subType: "vcl:badsub"));
+        XliffUnit unit = UnitOf(Ph("1", type: InlineCodeType.Other, subType: "vcl:bad\u0007sub"));
 
         AssertUnitRejected(unit, "a subType in the source of unit 'u' contains a character XML cannot carry");
     }
 
     [TestMethod]
+    public void RejectsASubFlowsContainingACharacterXmlCannotCarry()
+    {
+        //Kills XliffWriter.InlineContent.cs (CodeTextFieldProblems): omitting the subFlows check.
+        //Without it, a character XML cannot carry in SubFlows reaches XmlWriter directly and fails
+        //with its own context-free message instead of a Problems() refusal naming the unit and side.
+        XliffUnit unit = UnitOf(Ph("1", subFlows: "bad\u0007flow"));
+
+        AssertUnitRejected(unit, "a subFlows in the source of unit 'u' contains a character XML cannot carry");
+    }
+
+    [TestMethod]
     public void RejectsAnAnnotationValueContainingACharacterXmlCannotCarry()
     {
-        XliffUnit unit = UnitOf(Mrk("m", type: "comment", value: "badvalue"), new InlineTextPart("x"), MrkEnd("m"));
+        XliffUnit unit = UnitOf(Mrk("m", type: "comment", value: "bad\u0007value"), new InlineTextPart("x"), MrkEnd("m"));
 
         AssertUnitRejected(unit, "an annotation value in the source of unit 'u' contains a character XML cannot carry");
     }
@@ -729,7 +783,7 @@ public sealed class XliffWriterInlineContentTests
     [TestMethod]
     public void RejectsAnAnnotationRefContainingACharacterXmlCannotCarry()
     {
-        XliffUnit unit = UnitOf(Mrk("m", type: "comment", refValue: "badref"), new InlineTextPart("x"), MrkEnd("m"));
+        XliffUnit unit = UnitOf(Mrk("m", type: "comment", refValue: "bad\u0007ref"), new InlineTextPart("x"), MrkEnd("m"));
 
         AssertUnitRejected(unit, "an annotation ref in the source of unit 'u' contains a character XML cannot carry");
     }
@@ -737,7 +791,7 @@ public sealed class XliffWriterInlineContentTests
     [TestMethod]
     public void RejectsAnAnnotationTypeContainingACharacterXmlCannotCarry()
     {
-        XliffUnit unit = UnitOf(Mrk("m", type: "badtype"), new InlineTextPart("x"), MrkEnd("m"));
+        XliffUnit unit = UnitOf(Mrk("m", type: "bad\u0007type"), new InlineTextPart("x"), MrkEnd("m"));
 
         AssertUnitRejected(unit, "an annotation type in the source of unit 'u' contains a character XML cannot carry");
     }

@@ -691,14 +691,14 @@ public sealed class XliffWriterTests
         //XmlConvert.IsXmlChar refuses is now written as <cp hex="..."/> instead of rejecting the
         //document; RejectsAU0001CharacterInANote and its siblings still refuse the character
         //everywhere it cannot be cp-encoded, such as a note or an equiv.
-        var document = new XliffDocument(XliffVersion.V20, [NewFile("wallet", "en", null, [], [NewUnit("A", "bad\x0001char")])]);
+        var document = new XliffDocument(XliffVersion.V20, [NewFile("wallet", "en", null, [], [NewUnit("A", "bad\u0001char")])]);
 
         byte[] bytes = WriteToBytes(document);
         string xml = Encoding.UTF8.GetString(bytes);
         XliffDocument roundTripped = Read(bytes);
 
         Assert.Contains("<cp hex=\"0001\"", xml);
-        Assert.AreEqual("bad\x0001char", roundTripped.Files[0].Units[0].Source);
+        Assert.AreEqual("bad\u0001char", roundTripped.Files[0].Units[0].Source);
     }
 
     [TestMethod]
@@ -791,12 +791,12 @@ public sealed class XliffWriterTests
         //byte, so it shows up in a plain-text search of this file. 5.4 replaces the old whole-string
         //refusal (RejectsAU0001CharacterInATarget) with cp encoding, so this now round-trips instead
         //of being rejected.
-        var document = new XliffDocument(XliffVersion.V20, [NewFile("wallet", "en", "fi", [], [NewUnit("A", "Home", "bad\x0001target")])]);
+        var document = new XliffDocument(XliffVersion.V20, [NewFile("wallet", "en", "fi", [], [NewUnit("A", "Home", "bad\u0001target")])]);
 
         byte[] bytes = WriteToBytes(document);
         XliffDocument roundTripped = Read(bytes);
 
-        Assert.AreEqual("bad\x0001target", roundTripped.Files[0].Units[0].Target);
+        Assert.AreEqual("bad\u0001target", roundTripped.Files[0].Units[0].Target);
     }
 
     [TestMethod]
@@ -839,7 +839,7 @@ public sealed class XliffWriterTests
     [TestMethod]
     public void ListsEveryProblemInOneMessage()
     {
-        XliffUnit second = NewUnit("A", "Two", null, "bad\x0001note");
+        XliffUnit second = NewUnit("A", "Two", null, "bad\u0001note");
         var document = new XliffDocument(XliffVersion.V20, [NewFile("wallet", "en", null, [], [NewUnit("A", "One", "Yksi"), second])]);
 
         ArgumentException exception = Assert.ThrowsExactly<ArgumentException>(() => WriteToBytes(document));

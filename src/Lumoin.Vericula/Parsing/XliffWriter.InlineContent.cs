@@ -226,7 +226,7 @@ public static partial class XliffWriter
         writer.WriteEndElement();
     }
 
-    /// <summary>Writes the end half of a split spanning code, an <c>&lt;ec&gt;</c> element, self-closed: <c>id</c>/<c>isolated="yes"</c> when <see cref="EndCodePart.Isolated"/>, otherwise <c>startRef</c>.</summary>
+    /// <summary>Writes the end half of a split spanning code, an <c>&lt;ec&gt;</c> element, self-closed: <c>id</c>/<c>isolated="yes"</c> when <see cref="EndCodePart.Isolated"/>, otherwise <c>startRef</c>. <c>dir</c> is written only when <see cref="EndCodePart.Isolated"/>, per XLIFF 2.1 §4.2.3.5: <c>dir</c> MAY be used if and only if <c>isolated="yes"</c>.</summary>
     private static void WriteEndCode(XmlWriter writer, EndCodePart part)
     {
         writer.WriteStartElement(WellKnownXliffElements.EndCode);
@@ -234,6 +234,7 @@ public static partial class XliffWriter
         {
             writer.WriteAttributeString(WellKnownXliffAttributes.Id, part.Id ?? string.Empty);
             writer.WriteAttributeString(WellKnownXliffAttributes.Isolated, WellKnownXliffAttributeValues.Yes);
+            WriteDirectionIfNotInherited(writer, part.Direction);
         }
         else
         {
@@ -242,7 +243,6 @@ public static partial class XliffWriter
 
         WriteCodeTypeIfPresent(writer, part.Type);
         WriteIfNotNull(writer, WellKnownXliffAttributes.SubType, part.SubType);
-        WriteDirectionIfNotInherited(writer, part.Direction);
         WriteIfNotNull(writer, WellKnownXliffAttributes.DataRef, part.DataRef);
         WriteIfNotEmpty(writer, WellKnownXliffAttributes.Equiv, part.Equiv);
         WriteIfNotNull(writer, WellKnownXliffAttributes.Disp, part.Disp);
@@ -933,7 +933,7 @@ public static partial class XliffWriter
             {
                 case(PlaceholderPart placeholder):
                 {
-                    foreach(string problem in NameTokenProblems(placeholder.Id, $"an inline id in {what}"))
+                    foreach(string problem in NameTokenProblems(placeholder.Id, $"inline id in {what}"))
                     {
                         yield return problem;
                     }
@@ -943,7 +943,7 @@ public static partial class XliffWriter
                         yield return problem;
                     }
 
-                    foreach(string problem in CodeTextFieldProblems(placeholder.Disp, placeholder.Equiv, placeholder.SubType, placeholder.CopyOf, what))
+                    foreach(string problem in CodeTextFieldProblems(placeholder.Disp, placeholder.Equiv, placeholder.SubType, placeholder.CopyOf, placeholder.SubFlows, what))
                     {
                         yield return problem;
                     }
@@ -953,7 +953,7 @@ public static partial class XliffWriter
 
                 case(StartCodePart start):
                 {
-                    foreach(string problem in NameTokenProblems(start.Id, $"an inline id in {what}"))
+                    foreach(string problem in NameTokenProblems(start.Id, $"inline id in {what}"))
                     {
                         yield return problem;
                     }
@@ -963,7 +963,7 @@ public static partial class XliffWriter
                         yield return problem;
                     }
 
-                    foreach(string problem in CodeTextFieldProblems(start.Disp, start.Equiv, start.SubType, start.CopyOf, what))
+                    foreach(string problem in CodeTextFieldProblems(start.Disp, start.Equiv, start.SubType, start.CopyOf, start.SubFlows, what))
                     {
                         yield return problem;
                     }
@@ -974,8 +974,8 @@ public static partial class XliffWriter
                 case(EndCodePart end):
                 {
                     IEnumerable<string> idProblems = end.Isolated
-                        ? NameTokenProblems(end.Id, $"an inline id in {what}")
-                        : NameTokenProblems(end.StartRef, $"an inline startRef in {what}");
+                        ? NameTokenProblems(end.Id, $"inline id in {what}")
+                        : NameTokenProblems(end.StartRef, $"inline startRef in {what}");
                     foreach(string problem in idProblems)
                     {
                         yield return problem;
@@ -986,7 +986,7 @@ public static partial class XliffWriter
                         yield return problem;
                     }
 
-                    foreach(string problem in CodeTextFieldProblems(end.Disp, end.Equiv, end.SubType, end.CopyOf, what))
+                    foreach(string problem in CodeTextFieldProblems(end.Disp, end.Equiv, end.SubType, end.CopyOf, end.SubFlows, what))
                     {
                         yield return problem;
                     }
@@ -996,7 +996,7 @@ public static partial class XliffWriter
 
                 case(AnnotationStartPart annotationStart):
                 {
-                    foreach(string problem in NameTokenProblems(annotationStart.Id, $"an inline id in {what}"))
+                    foreach(string problem in NameTokenProblems(annotationStart.Id, $"inline id in {what}"))
                     {
                         yield return problem;
                     }
@@ -1021,7 +1021,7 @@ public static partial class XliffWriter
 
                 case(AnnotationEndPart annotationEnd):
                 {
-                    foreach(string problem in NameTokenProblems(annotationEnd.StartRef, $"an inline startRef in {what}"))
+                    foreach(string problem in NameTokenProblems(annotationEnd.StartRef, $"inline startRef in {what}"))
                     {
                         yield return problem;
                     }
@@ -1037,7 +1037,7 @@ public static partial class XliffWriter
     {
         if(dataRef is not null)
         {
-            foreach(string problem in NameTokenProblems(dataRef, $"a dataRef in {what}"))
+            foreach(string problem in NameTokenProblems(dataRef, $"dataRef in {what}"))
             {
                 yield return problem;
             }
@@ -1045,15 +1045,15 @@ public static partial class XliffWriter
 
         if(copyOf is not null)
         {
-            foreach(string problem in NameTokenProblems(copyOf, $"a copyOf in {what}"))
+            foreach(string problem in NameTokenProblems(copyOf, $"copyOf in {what}"))
             {
                 yield return problem;
             }
         }
     }
 
-    /// <summary>The <see cref="XmlTextProblems"/> shared by every code's <c>disp</c>, <c>equiv</c>, <c>subType</c> and <c>copyOf</c> (<c>copyOf</c> is checked for both name-token shape, in <see cref="CodeReferenceProblems"/>, and general XML-text validity, here).</summary>
-    private static IEnumerable<string> CodeTextFieldProblems(string? disp, string equiv, string? subType, string? copyOf, string what)
+    /// <summary>The <see cref="XmlTextProblems"/> shared by every code's <c>disp</c>, <c>equiv</c>, <c>subType</c>, <c>copyOf</c> and <c>subFlows</c> (<c>copyOf</c> is checked for both name-token shape, in <see cref="CodeReferenceProblems"/>, and general XML-text validity, here).</summary>
+    private static IEnumerable<string> CodeTextFieldProblems(string? disp, string equiv, string? subType, string? copyOf, string? subFlows, string what)
     {
         foreach(string problem in XmlTextProblems(disp, $"a disp in {what}"))
         {
@@ -1071,6 +1071,11 @@ public static partial class XliffWriter
         }
 
         foreach(string problem in XmlTextProblems(copyOf, $"a copyOf in {what}"))
+        {
+            yield return problem;
+        }
+
+        foreach(string problem in XmlTextProblems(subFlows, $"a subFlows in {what}"))
         {
             yield return problem;
         }

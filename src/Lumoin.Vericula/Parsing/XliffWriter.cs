@@ -22,10 +22,13 @@ namespace Lumoin.Vericula.Parsing;
 /// The writer emits exactly the vocabulary <see cref="XliffReader"/> consumes, so a read-write-read
 /// cycle reproduces a document the reader accepted: the root <c>version</c>, <c>srcLang</c> and
 /// <c>trgLang</c>; file, group, unit and segment ids; group nesting; every segment and ignorable with
-/// its source, target, state and sub-state; notes; the Validation module on files; the Glossary
-/// module on units; and, through the Metadata module, tone profiles, file-wide glossaries, scopes
-/// and named metadata. Text round-trips byte for byte: a carriage return is entitized so no reader's
-/// line-ending normalization can collapse it, and <c>xml:space="preserve"</c> is declared on the root.
+/// its inline source and target content, state and sub-state; the unit's <c>originalData</c> and
+/// <c>data</c> entries; notes; the Validation module on files; the Glossary module on units; and,
+/// through the Metadata module, tone profiles, file-wide glossaries, scopes and named metadata. Text
+/// round-trips byte for byte: a carriage return is entitized so no reader's line-ending normalization
+/// can collapse it, a character XML cannot carry is written as a <c>&lt;cp&gt;</c> code point, and
+/// <c>xml:space="preserve"</c> is declared on the root. Attributes are written only when they differ
+/// from the spec default, so attribute layout is normalized rather than round-tripped byte for byte.
 /// </para>
 /// <para>
 /// The whole document is validated and serialized into memory before a single byte reaches the
@@ -48,8 +51,13 @@ public static partial class XliffWriter
     /// If <paramref name="document"/> cannot be expressed as XLIFF the reader accepts: an unknown
     /// version, no files, a file without units or groups, a unit without segments, an id that is not
     /// an XML name token, duplicate unit ids within a file, a target without a target language, a
-    /// scope that is empty or contains whitespace, an empty metadata key, or text with characters XML
-    /// cannot carry. The message lists every problem found.
+    /// scope that is empty or contains whitespace, an empty metadata key, an attribute-valued field
+    /// (<c>disp</c>, <c>equiv</c>, <c>subType</c>, <c>copyOf</c>, an annotation's <c>value</c>,
+    /// <c>ref</c> or <c>type</c>, a note or a sub-state) containing a character XML cannot carry, or
+    /// an inline content problem (<see cref="InlineUnitProblems"/>, <see cref="InlinePartFieldProblems"/>):
+    /// a duplicate inline id, improper <c>Paired</c>/<c>Marker</c> nesting or <c>Split</c> pairing
+    /// across the unit's segments, inconsistent <c>OriginalData</c> for a shared <c>dataRef</c>, or a
+    /// per-field name-token or XML-text failure. The message lists every problem found.
     /// </exception>
     public static void Write(XliffDocument document, PipeWriter output)
     {
