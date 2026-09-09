@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Lumoin.Vericula.Content;
 
 namespace Lumoin.Vericula.Cooking;
 
@@ -17,4 +18,13 @@ public sealed record ResxCookOptions
     /// would then treat the neutral resource as a satellite of that culture.
     /// </summary>
     public string? BaseName { get; init; }
+
+    /// <summary>
+    /// Which <see cref="InlineRendering"/> every unit's source and target text is cooked with:
+    /// <see cref="InlineRendering.Markup"/>, the default, renders inline codes as an HTML fragment;
+    /// <see cref="InlineRendering.Plain"/> renders every code as its <c>equiv</c> fallback text
+    /// instead. The CLI's <c>compile</c> command always cooks with the default; slice 0 exposes no
+    /// <c>--plain-text</c> flag to choose <see cref="InlineRendering.Plain"/> from the command line.
+    /// </summary>
+    public InlineRendering Rendering { get; init; } = InlineRendering.Markup;
 }

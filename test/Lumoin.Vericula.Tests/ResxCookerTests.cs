@@ -1,5 +1,6 @@
 using System.Text;
 using System.Xml.Linq;
+using Lumoin.Vericula.Content;
 using Lumoin.Vericula.Cooking;
 using Lumoin.Vericula.Parsing;
 
@@ -431,6 +432,113 @@ public sealed class ResxCookerTests
         ImmutableArrayLike resources = Cook(new ResxCookOptions { BaseName = "Wallet.notaculture" }, EnFi);
 
         CollectionAssert.Contains(resources.FileNames, "Wallet.notaculture.resx");
+    }
+
+    [TestMethod]
+    public void PlainRenderingCooksEachCodesEquivInsteadOfSynthesizedMarkup()
+    {
+        //5.5: ResxCookOptions.Rendering selects InlineRendering.Plain, so a code that would otherwise
+        //synthesize a <b/> tag under the default Markup rendering instead cooks to its equiv text.
+        const string xliff = """
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en" trgLang="fi">
+              <file id="wallet">
+                <unit id="Bold"><segment><source>Hello <ph id="1" type="fmt" subType="xlf:b" equiv="[b]"/>!</source><target>Hei <ph id="1" type="fmt" subType="xlf:b" equiv="[b]"/>!</target></segment></unit>
+              </file>
+            </xliff>
+            """;
+
+        ImmutableArrayLike resources = Cook(new ResxCookOptions { Rendering = InlineRendering.Plain }, xliff);
+
+        Assert.AreEqual("Hello [b]!", DataOf(resources, "wallet.resx")["Bold"]);
+        Assert.AreEqual("Hei [b]!", DataOf(resources, "wallet.fi.resx")["Bold"]);
+    }
+
+    [TestMethod]
+    public void ACodeOnlyTargetThatRendersEmptyUnderPlainStillCooksAsAnEmptyTranslatedValue()
+    {
+        //5.5: the "untranslated" test is unit.RenderTarget(rendering) is null, not "the rendered
+        //string is empty". A target holding only a bare <ph/> (equiv defaults to empty) renders to the
+        //empty string under InlineRendering.Plain, but the target element itself is present, so the
+        //segment is complete and the unit still contributes a (empty) satellite entry, unlike a genuine
+        //<target></target> placeholder, which the reader turns into null content.
+        const string xliff = """
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en" trgLang="fi">
+              <file id="wallet">
+                <unit id="Icon"><segment><source><ph id="1"/></source><target><ph id="1"/></target></segment></unit>
+              </file>
+            </xliff>
+            """;
+
+        Dictionary<string, string> finnish = DataOf(Cook(new ResxCookOptions { Rendering = InlineRendering.Plain }, xliff), "wallet.fi.resx");
+
+        Assert.IsTrue(finnish.ContainsKey("Icon"));
+        Assert.AreEqual(string.Empty, finnish["Icon"]);
+    }
+
+    [TestMethod]
+    public void ThrowsNamingTheUnitAndTheNeutralResourceWhenTheSourceContainsACharacterXmlCannotCarry()
+    {
+        //5.5: a decoded cp whose code unit fails XmlConvert.IsXmlChar and is not part of a surrogate
+        //pair cannot go into a resx; the cooker must refuse it itself instead of letting XmlWriter fail
+        //deep inside Serialize. U+0003 (decoded from <cp hex="0003"/>) is such a character.
+        const string xliff = """
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="Ctrl"><segment><source>Ctrl+C=<cp hex="0003"/></source></segment></unit>
+              </file>
+            </xliff>
+            """;
+
+        ArgumentException exception = Assert.ThrowsExactly<ArgumentException>(() => Cook(xliff));
+        Assert.Contains("Ctrl", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void ContributorEqualityComparesTheRenderedStringNotTheMarkupShorthand()
+    {
+        //5.5: "contributor equality (the duplicate-id checks) compares the strings it writes" - the
+        //rendered string under options.Rendering, not a fixed Markup shorthand. Two <file> elements of
+        //one document disagree on a ph's original data (so their Markup renders differ, "<a/>" vs
+        //"<b/>") but share the same equiv "[x]"; under Rendering = Plain both files render the unit's
+        //source the same way, so the same-document collision guard must not throw.
+        const string collidingOriginalData = """
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="ui">
+                <unit id="Icon">
+                  <originalData><data id="d1">&lt;a/&gt;</data></originalData>
+                  <segment><source><ph id="1" equiv="[x]" dataRef="d1"/></source></segment>
+                </unit>
+              </file>
+              <file id="dialogs">
+                <unit id="Icon">
+                  <originalData><data id="d1">&lt;b/&gt;</data></originalData>
+                  <segment><source><ph id="1" equiv="[x]" dataRef="d1"/></source></segment>
+                </unit>
+              </file>
+            </xliff>
+            """;
+
+        Dictionary<string, string> neutral = DataOf(Cook(new ResxCookOptions { BaseName = "app", Rendering = InlineRendering.Plain }, collidingOriginalData), "app.resx");
+
+        Assert.AreEqual("[x]", neutral["Icon"]);
+    }
+
+    [TestMethod]
+    public void ThrowsNamingTheUnitAndTheCultureWhenTheTargetContainsACharacterXmlCannotCarry()
+    {
+        //5.5: the same refusal on the satellite path, where the source is clean and only the target
+        //(for culture "fi") carries the XML-unsafe decoded cp, so the exception must name the culture.
+        const string xliff = """
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en" trgLang="fi">
+              <file id="wallet">
+                <unit id="Ctrl"><segment><source>Ctrl+C</source><target>Ctrl+C=<cp hex="0003"/></target></segment></unit>
+              </file>
+            </xliff>
+            """;
+
+        ArgumentException exception = Assert.ThrowsExactly<ArgumentException>(() => Cook(xliff));
+        Assert.Contains("Ctrl", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("fi", exception.Message, StringComparison.Ordinal);
     }
 
     /// <summary>

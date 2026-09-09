@@ -35,6 +35,28 @@ public sealed class XliffGraphProjectionTests
     }
 
     [TestMethod]
+    public void LabelsUseThePlainRenderingOfInlineContentNotMarkup()
+    {
+        //5.5: rdfs:label is text, so a unit's label is RenderSource(Plain)/RenderTarget(Plain), not the
+        //Markup shorthand. A ph with a reserved xlf:b subType synthesizes a <b/> tag under Markup but
+        //renders as its bare equiv text under Plain; the label must carry the latter, never the tag.
+        const string xliff = """
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en" trgLang="fi">
+              <file id="wallet">
+                <unit id="Bold"><segment><source>Hello <ph id="1" type="fmt" subType="xlf:b" equiv="[b]"/>!</source><target>Hei <ph id="1" type="fmt" subType="xlf:b" equiv="[b]"/>!</target></segment></unit>
+              </file>
+            </xliff>
+            """;
+
+        ImmutableArray<Quad> quads = XliffGraphProjection.Project(Read(xliff), Base);
+
+        string[] rendered = quads.Select(quad => $"{quad.Subject} {quad.Predicate} {quad.Object}").ToArray();
+        CollectionAssert.Contains(rendered, "<https://example.org/wallet/wallet/Bold> <http://www.w3.org/2000/01/rdf-schema#label> \"Hello [b]!\"@en");
+        CollectionAssert.Contains(rendered, "<https://example.org/wallet/wallet/Bold> <http://www.w3.org/2000/01/rdf-schema#label> \"Hei [b]!\"@fi");
+        Assert.IsFalse(rendered.Any(triple => triple.Contains("<b/>", StringComparison.Ordinal)));
+    }
+
+    [TestMethod]
     public void PercentEncodesIdsInResourceIris()
     {
         const string xliff = """

@@ -4,6 +4,7 @@ using System.Text;
 using System.Xml;
 using System.Xml.Linq;
 using Lumoin.Base;
+using Lumoin.Vericula.Content;
 using Lumoin.Vericula.Documents;
 using Lumoin.Vericula.Units;
 
@@ -24,6 +25,16 @@ public static class ResxCooker
     /// satellite. When several documents share unit ids the last one read wins, which lets a
     /// directory of per-language files (the usual layout) fold into one coherent set.
     /// </summary>
+    /// <remarks>
+    /// Every cooked value is <see cref="XliffUnit.RenderSource(InlineRendering)"/> or
+    /// <see cref="XliffUnit.RenderTarget(InlineRendering)"/> under <see cref="ResxCookOptions.Rendering"/>
+    /// (<see cref="InlineRendering.Markup"/> by default); the duplicate-id checks below compare these
+    /// same rendered strings. A unit contributes a satellite entry exactly when
+    /// <see cref="XliffUnit.RenderTarget(InlineRendering)"/> is non-null: a unit whose translation is
+    /// complete but whose target renders to the empty string under
+    /// <see cref="InlineRendering.Plain"/> (a code-only target, whose <c>equiv</c> defaults to empty)
+    /// still writes an empty value, since it is a real translation, not a missing one.
+    /// </remarks>
     /// <param name="documents">The source-of-truth documents to cook.</param>
     /// <param name="options">Options that shape the run, or null for defaults.</param>
     /// <returns>The neutral resource followed by one satellite per target culture, ordered by culture.</returns>
@@ -32,14 +43,17 @@ public static class ResxCooker
     /// If two <c>&lt;file&gt;</c> elements of the same document both contribute a unit with the same
     /// id but different source text, or both translate the same unit id into the same culture with
     /// different target text (the same id, source or target, recurring across different documents,
-    /// the per-language layout, is unaffected and still resolves last-write-wins); or if the effective base
-    /// name's trailing dotted segment is itself a culture name, which would make MSBuild's
-    /// AssignCulture mistake the neutral resource for a satellite.
+    /// the per-language layout, is unaffected and still resolves last-write-wins); if a cooked value
+    /// contains a character XML cannot carry (a decoded <c>cp</c>, naming the unit and whether it was
+    /// cooking the neutral resource or one culture's satellite); or if the effective base name's
+    /// trailing dotted segment is itself a culture name, which would make MSBuild's AssignCulture
+    /// mistake the neutral resource for a satellite.
     /// </exception>
     public static ImmutableArray<CookedResource> Cook(IReadOnlyCollection<XliffDocument> documents, ResxCookOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(documents);
 
+        InlineRendering rendering = options?.Rendering ?? InlineRendering.Markup;
         string? baseName = options?.BaseName;
         var neutral = new SortedDictionary<string, string>(StringComparer.Ordinal);
         var cultures = new SortedDictionary<string, SortedDictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
@@ -67,40 +81,47 @@ public static class ResxCooker
                 string? culture = file.TargetLanguage?.Value;
                 foreach(XliffUnit unit in EnumerateUnits(file))
                 {
+                    string source = unit.RenderSource(rendering);
+                    RequireXmlSafeValue(source, unit.Id, culture: null);
+
                     if(contributors.TryGetValue(unit.Id, out (string FileId, string Source) contributor)
                         && !string.Equals(contributor.FileId, file.Id, StringComparison.Ordinal)
-                        && !string.Equals(contributor.Source, unit.Source, StringComparison.Ordinal))
+                        && !string.Equals(contributor.Source, source, StringComparison.Ordinal))
                     {
                         throw new ArgumentException(
                             $"Unit '{unit.Id}' is contributed by both file '{contributor.FileId}' and file '{file.Id}' with different source text.",
                             nameof(documents));
                     }
 
-                    contributors[unit.Id] = (file.Id, unit.Source);
+                    contributors[unit.Id] = (file.Id, source);
 
-                    neutral[unit.Id] = unit.Source;
+                    neutral[unit.Id] = source;
 
                     //Tracks the same last-write-wins order as the values themselves, so the resource
                     //carries the tag of whichever document most recently contributed to it.
                     neutralTag = document.Tag;
 
-                    //An empty target is treated as untranslated: writing a blank satellite value would
-                    //shadow the neutral source at runtime instead of falling back to it.
-                    if(culture is not null && !string.IsNullOrEmpty(unit.Target))
+                    //A translation is complete exactly when RenderTarget is non-null (XliffUnit's
+                    //completeness rule); a non-null but empty value, such as a code-only target under
+                    //InlineRendering.Plain, is a real translation and is still written, not skipped as
+                    //untranslated.
+                    if(culture is not null && unit.RenderTarget(rendering) is { } target)
                     {
+                        RequireXmlSafeValue(target, unit.Id, culture);
+
                         (string Culture, string UnitId) targetKey = (culture, unit.Id);
                         if(targetContributors.TryGetValue(targetKey, out (string FileId, string Target) targetContributor)
                             && !string.Equals(targetContributor.FileId, file.Id, StringComparison.Ordinal)
-                            && !string.Equals(targetContributor.Target, unit.Target, StringComparison.Ordinal))
+                            && !string.Equals(targetContributor.Target, target, StringComparison.Ordinal))
                         {
                             throw new ArgumentException(
                                 $"Unit '{unit.Id}' for culture '{culture}' is contributed by both file '{targetContributor.FileId}' and file '{file.Id}' with different target text.",
                                 nameof(documents));
                         }
 
-                        targetContributors[targetKey] = (file.Id, unit.Target);
+                        targetContributors[targetKey] = (file.Id, target);
 
-                        TableFor(cultures, culture)[unit.Id] = unit.Target;
+                        TableFor(cultures, culture)[unit.Id] = target;
                         cultureTags[culture] = document.Tag;
                     }
                 }
@@ -201,6 +222,56 @@ public static class ResxCooker
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Refuses a cooked value that carries a character XML cannot represent - a decoded <c>cp</c> whose
+    /// code unit is not part of a valid surrogate pair and fails <see cref="XmlConvert.IsXmlChar(char)"/> -
+    /// instead of letting <see cref="Serialize"/>'s <see cref="XmlWriter"/> fail deep inside the resx
+    /// document with no indication of which unit or culture the offending value came from.
+    /// </summary>
+    /// <param name="value">The cooked value to check.</param>
+    /// <param name="unitId">The id of the unit the value was cooked from, named in the exception.</param>
+    /// <param name="culture">The culture the value was cooked for, or null for the neutral resource; named in the exception.</param>
+    /// <exception cref="ArgumentException">If <paramref name="value"/> contains a character XML cannot carry.</exception>
+    private static void RequireXmlSafeValue(string value, string unitId, string? culture)
+    {
+        if(IsXmlSafeText(value))
+        {
+            return;
+        }
+
+        string where = culture is null ? "the neutral resource" : $"culture '{culture}'";
+
+        throw new ArgumentException($"Unit '{unitId}' has a cooked value for {where} that contains a character XML cannot carry.");
+    }
+
+    /// <summary>
+    /// Reports whether every character of <paramref name="value"/> is one XML can carry: every UTF-16
+    /// code unit passes <see cref="XmlConvert.IsXmlChar(char)"/>, except a high surrogate immediately
+    /// followed by its low surrogate, which together form one valid character above U+FFFF.
+    /// </summary>
+    /// <param name="value">The value to check.</param>
+    /// <returns><see langword="true"/> if every character is XML-safe; otherwise, <see langword="false"/>.</returns>
+    private static bool IsXmlSafeText(string value)
+    {
+        for(int index = 0; index < value.Length; index++)
+        {
+            char current = value[index];
+            if(char.IsHighSurrogate(current) && index + 1 < value.Length && char.IsLowSurrogate(value[index + 1]))
+            {
+                index += 1;
+
+                continue;
+            }
+
+            if(!XmlConvert.IsXmlChar(current))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>

@@ -216,6 +216,245 @@ public sealed class LinterTests
     }
 
     [TestMethod]
+    public void DoesNotReportMissingTargetWhenTheOnlyTextIsInsideAMrkTranslateNoAnnotation()
+    {
+        //Decision 3, mrk shape: a mrk-wrapped translate="no" span carries the unit's only text, so
+        //there is nothing to translate and VFX105 must not fire even though no segment carries a target.
+        var start = new AnnotationStartPart("m1", "generic", false, null, null, AnnotationForm.Marker);
+        var end = new AnnotationEndPart("m1", AnnotationForm.Marker);
+        XliffUnit unit = UnitOf(new XliffSegment("s1", SegmentKind.Translatable, InlineContent.Create([start, new InlineTextPart("Hidden"), end]), null, SegmentState.Initial, null));
+
+        XliffFile file = new(
+            "wallet",
+            new LanguageTag("en"),
+            new LanguageTag("fi"),
+            ToneProfile: null,
+            Glossary: null,
+            ValidationRules: null,
+            ImmutableArray<XliffGroup>.Empty,
+            ImmutableArray.Create(unit));
+
+        Assert.HasCount(0, Linter.Lint(DocumentOf(file)));
+    }
+
+    [TestMethod]
+    public void DoesNotReportMissingTargetWhenTheOnlyTextIsInsideASplitSmEmTranslateNoAnnotationInOneSegment()
+    {
+        //Decision 3, sm/em shape (both halves in one segment): same exemption as the mrk shape, but
+        //serialized as a split sm/em pair rather than one mrk element.
+        var start = new AnnotationStartPart("s1", "generic", false, null, null, AnnotationForm.Split);
+        var end = new AnnotationEndPart("s1", AnnotationForm.Split);
+        XliffUnit unit = UnitOf(new XliffSegment("s1", SegmentKind.Translatable, InlineContent.Create([start, new InlineTextPart("Hidden"), end]), null, SegmentState.Initial, null));
+
+        XliffFile file = new(
+            "wallet",
+            new LanguageTag("en"),
+            new LanguageTag("fi"),
+            ToneProfile: null,
+            Glossary: null,
+            ValidationRules: null,
+            ImmutableArray<XliffGroup>.Empty,
+            ImmutableArray.Create(unit));
+
+        Assert.HasCount(0, Linter.Lint(DocumentOf(file)));
+    }
+
+    [TestMethod]
+    public void DoesNotReportMissingTargetWhenASmTranslateNoOpenedInOneSegmentIsClosedInALaterSegment()
+    {
+        //Decision 3, carried-across-segments shape: the sm opens in segment 1 with nothing before it,
+        //covers all of segment 2's text, and the em closes it in segment 3; none of the three segments
+        //carries a target, yet the unit's only text is entirely inside the translate="no" span, so
+        //VFX105 must not fire.
+        var start = new AnnotationStartPart("s1", "generic", false, null, null, AnnotationForm.Split);
+        var end = new AnnotationEndPart("s1", AnnotationForm.Split);
+        XliffUnit unit = UnitOf(
+            new XliffSegment("seg1", SegmentKind.Translatable, InlineContent.Create([start]), null, SegmentState.Initial, null),
+            new XliffSegment("seg2", SegmentKind.Translatable, InlineContent.FromText("Hidden middle"), null, SegmentState.Initial, null),
+            new XliffSegment("seg3", SegmentKind.Translatable, InlineContent.Create([end]), null, SegmentState.Initial, null));
+
+        XliffFile file = new(
+            "wallet",
+            new LanguageTag("en"),
+            new LanguageTag("fi"),
+            ToneProfile: null,
+            Glossary: null,
+            ValidationRules: null,
+            ImmutableArray<XliffGroup>.Empty,
+            ImmutableArray.Create(unit));
+
+        Assert.HasCount(0, Linter.Lint(DocumentOf(file)));
+    }
+
+    [TestMethod]
+    public void ReportsAnUnresolvableCodeAsAWarningNamingTheUnitTheSegmentAndTheCode()
+    {
+        //5.6: a placeholder with no original data, no disp and no WellKnownInlineTokens match (a bare
+        //type="None" code) renders as its equiv text alone, so it earns a VFX110 warning naming the
+        //unit, the segment and the code id.
+        var placeholder = new PlaceholderPart("ph1", InlineCodeType.None, null, "[x]", null, null, null, true, true, ReorderHint.Yes, null, null);
+        XliffUnit unit = UnitOf(new XliffSegment("s1", SegmentKind.Translatable, InlineContent.Create([new InlineTextPart("Salt "), placeholder]), InlineContent.FromText("Suola [x]"), SegmentState.Translated, null));
+
+        XliffFile file = new(
+            "wallet",
+            new LanguageTag("en"),
+            TargetLanguage: null,
+            ToneProfile: null,
+            Glossary: null,
+            ValidationRules: null,
+            ImmutableArray<XliffGroup>.Empty,
+            ImmutableArray.Create(unit));
+
+        LintDiagnostic diagnostic = Only(Linter.Lint(DocumentOf(file)));
+
+        Assert.AreEqual("VFX110", diagnostic.Id);
+        Assert.AreEqual(LintSeverity.Warning, diagnostic.Severity);
+        Assert.Contains("unit 'A'", diagnostic.Message, StringComparison.Ordinal);
+        Assert.Contains("segment 's1'", diagnostic.Message, StringComparison.Ordinal);
+        Assert.Contains("'ph1'", diagnostic.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void DoesNotReportAnUnresolvableCodeWhenTheCodeCarriesOriginalData()
+    {
+        //VFX110 must not fire when OriginalData resolves the code's rendering on its own, even though
+        //the code has no disp and no WellKnownInlineTokens match.
+        var placeholder = new PlaceholderPart("ph1", InlineCodeType.None, null, "[x]", null, null, new OriginalData("<x/>"), true, true, ReorderHint.Yes, null, null);
+        XliffUnit unit = UnitOf(new XliffSegment("s1", SegmentKind.Translatable, InlineContent.Create([placeholder]), InlineContent.FromText("[x]"), SegmentState.Translated, null));
+
+        XliffFile file = new(
+            "wallet",
+            new LanguageTag("en"),
+            TargetLanguage: null,
+            ToneProfile: null,
+            Glossary: null,
+            ValidationRules: null,
+            ImmutableArray<XliffGroup>.Empty,
+            ImmutableArray.Create(unit));
+
+        Assert.HasCount(0, Linter.Lint(DocumentOf(file)));
+    }
+
+    [TestMethod]
+    public void DoesNotReportAnUnresolvableCodeWhenTheCodeResolvesToASynthesizedElement()
+    {
+        //VFX110 must not fire when WellKnownInlineTokens.TryResolve alone resolves the code (a
+        //reserved subType, here), even with no original data and no disp.
+        var placeholder = new PlaceholderPart("ph1", InlineCodeType.Format, "xlf:lb", string.Empty, null, null, null, true, true, ReorderHint.Yes, null, null);
+        XliffUnit unit = UnitOf(new XliffSegment("s1", SegmentKind.Translatable, InlineContent.Create([placeholder]), InlineContent.FromText("x"), SegmentState.Translated, null));
+
+        XliffFile file = new(
+            "wallet",
+            new LanguageTag("en"),
+            TargetLanguage: null,
+            ToneProfile: null,
+            Glossary: null,
+            ValidationRules: null,
+            ImmutableArray<XliffGroup>.Empty,
+            ImmutableArray.Create(unit));
+
+        Assert.HasCount(0, Linter.Lint(DocumentOf(file)));
+    }
+
+    [TestMethod]
+    public void DoesNotReportAnUnresolvableCodeWhenTheCodeCarriesDisplayText()
+    {
+        //VFX110 must not fire when disp alone gives the code a rendering, even with no original data
+        //and no WellKnownInlineTokens match.
+        var placeholder = new PlaceholderPart("ph1", InlineCodeType.None, null, "[x]", "<icon/>", null, null, true, true, ReorderHint.Yes, null, null);
+        XliffUnit unit = UnitOf(new XliffSegment("s1", SegmentKind.Translatable, InlineContent.Create([placeholder]), InlineContent.FromText("x"), SegmentState.Translated, null));
+
+        XliffFile file = new(
+            "wallet",
+            new LanguageTag("en"),
+            TargetLanguage: null,
+            ToneProfile: null,
+            Glossary: null,
+            ValidationRules: null,
+            ImmutableArray<XliffGroup>.Empty,
+            ImmutableArray.Create(unit));
+
+        Assert.HasCount(0, Linter.Lint(DocumentOf(file)));
+    }
+
+    [TestMethod]
+    public void SegmentLevelRulesEvaluateAgainstThePlainRenderingNotMarkup()
+    {
+        //5.6: segment-level checks run on the segment's Plain content. A ph resolved from
+        //OriginalData renders "<icon/>" under Markup but its equiv "[b]" under Plain; a PresenceRule
+        //requiring "[b]" is satisfied only when the check runs on the Plain rendering.
+        var placeholder = new PlaceholderPart("ph1", InlineCodeType.None, null, "[b]", null, null, new OriginalData("<icon/>"), true, true, ReorderHint.Yes, null, null);
+        XliffUnit unit = UnitOf(new XliffSegment("s1", SegmentKind.Translatable, InlineContent.FromText("Hei"), InlineContent.Create([new InlineTextPart("Hei "), placeholder]), SegmentState.Translated, null));
+        XliffFile file = FileWithRules(RuleSet(new PresenceRule("[b]")), unit);
+
+        Assert.HasCount(0, Linter.Lint(DocumentOf(file)));
+    }
+
+    [TestMethod]
+    public void GlossaryCheckEvaluatesTheUnitsPlainRenderingNotMarkup()
+    {
+        //5.6: the glossary check runs on RenderSource(Plain)/RenderTarget(Plain). The target's ph
+        //resolves to "<icon/>" under Markup but to its equiv "[kukkaro]" under Plain; the glossary's
+        //required rendering "[kukkaro]" is found only when the check runs on the Plain target.
+        var glossary = new Glossary(ImmutableArray.Create(
+            new GlossaryEntry("wallet", "[kukkaro]", null, GlossaryEntryStatus.Preferred, ImmutableArray<Scope>.Empty, null)));
+        var placeholder = new PlaceholderPart("ph1", InlineCodeType.None, null, "[kukkaro]", null, null, new OriginalData("<icon/>"), true, true, ReorderHint.Yes, null, null);
+        XliffUnit unit = UnitOf(new XliffSegment(
+            "s1",
+            SegmentKind.Translatable,
+            InlineContent.FromText("Open your wallet"),
+            InlineContent.Create([new InlineTextPart("Avaa "), placeholder]),
+            SegmentState.Translated,
+            null));
+
+        XliffFile file = new(
+            "app",
+            new LanguageTag("en"),
+            new LanguageTag("fi"),
+            ToneProfile: null,
+            glossary,
+            ValidationRules: null,
+            ImmutableArray<XliffGroup>.Empty,
+            ImmutableArray.Create(unit));
+
+        Assert.HasCount(0, Linter.Lint(DocumentOf(file)));
+    }
+
+    [TestMethod]
+    public void GlossaryCheckSearchesTheUnitsPlainRenderedSourceNotItsMarkup()
+    {
+        //Linter.cs, LintUnit: unit.RenderSource(InlineRendering.Plain) => unit.Source (the Markup
+        //shorthand) — a glossary term hidden behind a resolved code's synthesized/original-data
+        //rendering ("Open your <icon/>" under Markup) is invisible to ContainsTerm, so the mutant
+        //finds no term use and reports nothing; the source's Plain rendering ("Open your wallet")
+        //still carries the term as text, so the correct code reports the missing rendering.
+        var glossary = new Glossary(ImmutableArray.Create(
+            new GlossaryEntry("wallet", "lompakko", null, GlossaryEntryStatus.Preferred, ImmutableArray<Scope>.Empty, null)));
+        var placeholder = new PlaceholderPart("ph1", InlineCodeType.None, null, "wallet", null, null, new OriginalData("<icon/>"), true, true, ReorderHint.Yes, null, null);
+        XliffUnit unit = UnitOf(new XliffSegment(
+            "s1",
+            SegmentKind.Translatable,
+            InlineContent.Create([new InlineTextPart("Open your "), placeholder]),
+            InlineContent.FromText("Avaa kukkarosi"),
+            SegmentState.Translated,
+            null));
+
+        XliffFile file = new(
+            "app",
+            new LanguageTag("en"),
+            new LanguageTag("fi"),
+            ToneProfile: null,
+            glossary,
+            ValidationRules: null,
+            ImmutableArray<XliffGroup>.Empty,
+            ImmutableArray.Create(unit));
+
+        LintDiagnostic diagnostic = Only(Linter.Lint(DocumentOf(file)));
+
+        Assert.AreEqual("VFX106", diagnostic.Id);
+    }
+
+    [TestMethod]
     public void ReportsGlossaryRenderingMissingForAPreferredTerm()
     {
         var glossary = new Glossary(ImmutableArray.Create(
@@ -816,6 +1055,24 @@ public sealed class LinterTests
     private static XliffUnit Unit(string id, string source, string? target)
     {
         return XliffUnit.FromText(id, source, target);
+    }
+
+    /// <summary>
+    /// Builds a unit with id "A" from the given segments, with no notes, scopes, metadata or glossary,
+    /// for tests that need inline codes or annotations <see cref="Unit(string, string, string?)"/>'s
+    /// text-only shorthand cannot build.
+    /// </summary>
+    /// <param name="segments">The unit's segments.</param>
+    /// <returns>The built unit.</returns>
+    private static XliffUnit UnitOf(params XliffSegment[] segments)
+    {
+        return new XliffUnit(
+            "A",
+            ImmutableArray.Create(segments),
+            ImmutableArray<string>.Empty,
+            ImmutableArray<Scope>.Empty,
+            ImmutableDictionary<string, string>.Empty,
+            null);
     }
 
     /// <summary>

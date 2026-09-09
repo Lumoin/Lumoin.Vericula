@@ -107,6 +107,17 @@ public static class WellKnownDiagnostics
     /// </summary>
     public static readonly string RegexTimedOut = Utf8Constants.ToInternedString(RegexTimedOutUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="UnresolvableCode"/>.</summary>
+    public static ReadOnlySpan<byte> UnresolvableCodeUtf8 => "VFX110"u8;
+
+    /// <summary>
+    /// The id reported when a code part carries no original data, resolves to no synthesized element
+    /// and carries no <c>disp</c>, so it renders as its <c>equiv</c> text alone. A warning: the
+    /// content still round-trips, but a <see cref="Content.InlineRendering.Markup"/> render of it loses
+    /// whatever formatting the code stood for.
+    /// </summary>
+    public static readonly string UnresolvableCode = Utf8Constants.ToInternedString(UnresolvableCodeUtf8);
+
     /// <summary>Determines if a diagnostic id is <see cref="PresenceViolation"/>.</summary>
     /// <param name="id">The diagnostic id to test.</param>
     /// <returns><see langword="true"/> if the id is the presence-violation id; otherwise, <see langword="false"/>.</returns>

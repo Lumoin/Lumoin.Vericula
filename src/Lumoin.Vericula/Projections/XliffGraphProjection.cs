@@ -4,6 +4,7 @@ using System.Text;
 using Lumoin.Base;
 using Lumoin.Veritas.Core;
 using Lumoin.Veritas.Turtle;
+using Lumoin.Vericula.Content;
 using Lumoin.Vericula.Documents;
 using Lumoin.Vericula.Scopes;
 using Lumoin.Vericula.Units;
@@ -15,7 +16,9 @@ namespace Lumoin.Vericula.Projections;
 /// unit's source and target texts as language-tagged labels, its notes as untagged comments, the union
 /// of its own scopes and every enclosing group's scopes as subjects, and the file and unit ids as
 /// identifiers. The graph is a derived view of the document, never the other way round; XLIFF stays the
-/// source of truth.
+/// source of truth. A label is <see cref="InlineRendering.Plain"/> text (<c>rdfs:label</c> is text, not
+/// markup): <see cref="XliffUnit.RenderSource(InlineRendering)"/> and
+/// <see cref="XliffUnit.RenderTarget(InlineRendering)"/> under <see cref="InlineRendering.Plain"/>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -177,8 +180,8 @@ public static class XliffGraphProjection
         NamedNode unitNode = Node(UnitIri(fileIri, unit));
         yield return new Quad(unitNode, WellKnownProjectionTerms.IdentifierNode, PlainLiteral(unit.Id));
         yield return new Quad(unitNode, WellKnownProjectionTerms.IsPartOfNode, fileNode);
-        yield return new Quad(unitNode, WellKnownProjectionTerms.LabelNode, TaggedLiteral(unit.Source, file.SourceLanguage));
-        if(unit.Target is { } target)
+        yield return new Quad(unitNode, WellKnownProjectionTerms.LabelNode, TaggedLiteral(unit.RenderSource(InlineRendering.Plain), file.SourceLanguage));
+        if(unit.RenderTarget(InlineRendering.Plain) is { } target)
         {
             if(file.TargetLanguage is not { } targetLanguage)
             {

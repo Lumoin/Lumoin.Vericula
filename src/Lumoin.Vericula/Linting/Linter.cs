@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using Lumoin.Vericula.Content;
 using Lumoin.Vericula.Diagnostics;
 using Lumoin.Vericula.Documents;
 using Lumoin.Vericula.Glossaries;
@@ -25,6 +26,9 @@ namespace Lumoin.Vericula.Linting;
 /// <item><description>VFX107 - a target does not start with a <see cref="StartsWithRule"/> text (error).</description></item>
 /// <item><description>VFX108 - a target does not end with an <see cref="EndsWithRule"/> text (error).</description></item>
 /// <item><description>VFX109 - matching a <see cref="RegexRule"/> pattern against a target timed out (error).</description></item>
+/// <item><description>VFX110 - a code part carries no <see cref="OriginalData"/>, resolves to no
+/// synthesized element and carries no <c>disp</c>, so it renders as its <c>equiv</c> text alone
+/// (warning).</description></item>
 /// </list>
 /// The glossary check consults the file-wide glossary first and then the unit's own glossary.
 /// Presence is a warning because a missing phrase is often a paraphrase rather than a defect;
@@ -41,6 +45,14 @@ namespace Lumoin.Vericula.Linting;
 /// segments and one validation rule can raise that rule up to three times, once per translated
 /// segment, each diagnostic naming its segment when the segment has an id. A <see cref="ValidationRule"/>
 /// whose <see cref="ValidationRule.Disabled"/> is true is skipped entirely, per §5.8.5.9 disabled.
+/// Every rule and the glossary check compare <see cref="InlineRendering.Plain"/> renders: a
+/// segment-level rule against <see cref="XliffSegment.TargetContent"/>'s own Plain render, the
+/// glossary check against the unit's <see cref="Units.XliffUnit.RenderSource(InlineRendering)"/> and
+/// <see cref="Units.XliffUnit.RenderTarget(InlineRendering)"/> under
+/// <see cref="InlineRendering.Plain"/>. The missing-target check is rendering-independent: it tests
+/// only whether <see cref="Units.XliffUnit.RenderTarget(InlineRendering)"/> is null, which the
+/// completeness rule (<see cref="Units.XliffUnit"/>) decides before any rendering happens, so a unit
+/// whose only source text sits inside a <c>translate="no"</c> annotation is never reported.
 /// </remarks>
 public static class Linter
 {
@@ -62,8 +74,9 @@ public static class Linter
     /// before that file's per-unit diagnostics, in the order its rule appears in
     /// <see cref="Documents.XliffFile.ValidationRules"/>. Within a unit, diagnostics are reported
     /// in this order: the file's validation rules (in their declared order, evaluated once per
-    /// translatable segment that carries a target, in document order), the missing-target check,
-    /// then the glossary check.
+    /// translatable segment that carries a target, in document order), the unresolvable-code check
+    /// (every segment's source content then its target content, in document order), the
+    /// missing-target check, then the glossary check.
     /// </remarks>
     /// <param name="document">The document to lint.</param>
     /// <returns>The diagnostics found; empty when the document is clean.</returns>
@@ -159,14 +172,15 @@ public static class Linter
     }
 
     /// <summary>
-    /// Lints one unit: every compiled rule against every translatable segment that carries a target,
-    /// the missing-target check, then the glossary check.
+    /// Lints one unit: every compiled rule against every translatable segment's own
+    /// <see cref="InlineRendering.Plain"/> target, the unresolvable-code check, the missing-target
+    /// check, then the glossary check.
     /// </summary>
     private static IEnumerable<LintDiagnostic> LintUnit(XliffFile file, XliffUnit unit, ImmutableArray<CompiledRule> compiledRules)
     {
         foreach(XliffSegment segment in unit.Segments)
         {
-            if(segment.Kind is not SegmentKind.Translatable || segment.Target is not { } segmentTarget)
+            if(segment.Kind is not SegmentKind.Translatable || segment.TargetContent?.Render(InlineRendering.Plain) is not { } segmentTarget)
             {
                 continue;
             }
@@ -181,7 +195,23 @@ public static class Linter
             }
         }
 
-        string? target = unit.Target;
+        foreach(XliffSegment segment in unit.Segments)
+        {
+            foreach(LintDiagnostic diagnostic in LintUnresolvableCodes(file, unit, segment.Id, segment.SourceContent))
+            {
+                yield return diagnostic;
+            }
+
+            if(segment.TargetContent is { } targetContent)
+            {
+                foreach(LintDiagnostic diagnostic in LintUnresolvableCodes(file, unit, segment.Id, targetContent))
+                {
+                    yield return diagnostic;
+                }
+            }
+        }
+
+        string? target = unit.RenderTarget(InlineRendering.Plain);
         if(file.TargetLanguage is not null && target is null)
         {
             yield return new LintDiagnostic(
@@ -193,7 +223,7 @@ public static class Linter
 
         if(target is not null && (file.Glossary is not null || unit.Glossary is not null))
         {
-            foreach(LintDiagnostic diagnostic in LintGlossary(file, unit, unit.Source, target))
+            foreach(LintDiagnostic diagnostic in LintGlossary(file, unit, unit.RenderSource(InlineRendering.Plain), target))
             {
                 yield return diagnostic;
             }
@@ -294,6 +324,44 @@ public static class Linter
             $"Target for {label} does not match the required pattern '{rule.Pattern}'.",
             location,
             segmentId);
+    }
+
+    /// <summary>
+    /// Reports a VFX110 diagnostic for every code part of <paramref name="content"/> that renders as
+    /// its <c>equiv</c> text alone: it carries no <see cref="OriginalData"/>, no
+    /// <see cref="WellKnownInlineTokens.TryResolve"/> element name, and no <c>disp</c>, so under
+    /// <see cref="InlineRendering.Markup"/> it falls through every preferred rendering to the last
+    /// resort.
+    /// </summary>
+    /// <param name="file">The file the unit belongs to, used to build the diagnostic's location.</param>
+    /// <param name="unit">The unit the content belongs to.</param>
+    /// <param name="segmentId">The id of the segment <paramref name="content"/> belongs to, or null when the segment has none.</param>
+    /// <param name="content">The source or target content to check.</param>
+    /// <returns>A VFX110 diagnostic for each unresolvable code part found, in document order.</returns>
+    private static IEnumerable<LintDiagnostic> LintUnresolvableCodes(XliffFile file, XliffUnit unit, string? segmentId, InlineContent content)
+    {
+        foreach(InlinePart part in content.Parts)
+        {
+            (string? codeId, InlineCodeType type, string? subType, OriginalData? originalData, string? disp) = part switch
+            {
+                PlaceholderPart placeholder => (placeholder.Id, placeholder.Type, placeholder.SubType, placeholder.OriginalData, placeholder.Disp),
+                StartCodePart start => (start.Id, start.Type, start.SubType, start.OriginalData, start.Disp),
+                EndCodePart end => (end.Isolated ? end.Id : end.StartRef, end.Type, end.SubType, end.OriginalData, end.Disp),
+                _ => (null, InlineCodeType.None, null, null, null)
+            };
+
+            if(codeId is null || originalData is not null || disp is not null || WellKnownInlineTokens.TryResolve(type, subType, originalData, out _))
+            {
+                continue;
+            }
+
+            yield return new LintDiagnostic(
+                WellKnownDiagnostics.UnresolvableCode,
+                LintSeverity.Warning,
+                $"Code '{codeId}' in {SegmentLabel(unit, segmentId)} has no original data, no display text and resolves to no known element, so it renders as its equiv text only.",
+                Locate(file, unit),
+                segmentId);
+        }
     }
 
     /// <summary>

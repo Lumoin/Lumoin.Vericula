@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 - `Lumoin.Vericula.MessageFormat`: a parser (`MessageFormatReader.Parse` and `TryParse`) for the MessageFormat 2.0 data model, reporting syntax and data model errors as `VFX2xx` diagnostics with line and position; not yet packaged.
 - Vendored the official Unicode MessageFormat 2.0 conformance test suite (tag `LDML48.2`, Unicode License V3) into the test project.
+- `ResxCookOptions.Rendering` selects the `InlineRendering` (`Markup`, the default, or `Plain`) every cooked resx value is rendered with; `WellKnownDiagnostics` gains `VFX110`, reported when an inline code renders as its `equiv` text alone. The CLI `compile` command still always cooks with the default `Markup` rendering; a `--plain-text` flag to choose `Plain` from the command line is a later change, not part of slice 0.
 
 ### Changed
 

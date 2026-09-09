@@ -19,6 +19,10 @@ namespace Lumoin.Vericula.Units;
 /// <see cref="SegmentState.NeedsTranslation"/> and either carries target content or its source has no
 /// translatable text at all (nothing to translate, because the source holds only markup or only text
 /// inside <c>translate="no"</c> annotations); an ignorable segment is exempt and always counts.
+/// Translatable text is found by <see cref="InlineTranslatability.Walk(InlineContent, ImmutableStack{bool})"/>,
+/// carrying its stack of nested <c>translate</c> overrides across the unit's segments in document
+/// order on the source side, so an <c>sm translate="no"</c> opened in one segment and closed in a
+/// later one also exempts every segment in between, not only the segment that opens or closes it.
 /// <see cref="Source"/> and <see cref="Target"/> are the <see cref="InlineRendering.Markup"/>
 /// shorthands of these two methods.
 /// </remarks>
@@ -63,19 +67,26 @@ public sealed record XliffUnit(
     /// <summary>
     /// Renders the unit's complete translation, or null when it is not yet complete. A translatable
     /// segment is complete when it is not <see cref="SegmentState.NeedsTranslation"/> and either
-    /// carries target content or its source has no translatable text at all; an ignorable segment is
-    /// always complete. When every segment is complete, each one's target folds in when it has one and
-    /// its source otherwise, in document order, which is how the whitespace a tool leaves untranslated
-    /// on an ignorable, and the markup-only text a complete segment has no target for, both survive
-    /// the fold.
+    /// carries target content or its source has no translatable text at all, where "translatable text"
+    /// is found by walking every segment's source in document order with one
+    /// <see cref="InlineTranslatability"/> stack carried across the whole unit (so a <c>translate="no"</c>
+    /// span opened in one segment and closed in a later one also exempts the segments between them); an
+    /// ignorable segment is always complete. When every segment is complete, each one's target folds in
+    /// when it has one and its source otherwise, in document order, which is how the whitespace a tool
+    /// leaves untranslated on an ignorable, and the markup-only text a complete segment has no target
+    /// for, both survive the fold.
     /// </summary>
     /// <param name="rendering">Which rendering each segment's target or source is folded from.</param>
     /// <returns>The rendered target, or null when the translation is not complete.</returns>
     public string? RenderTarget(InlineRendering rendering)
     {
+        ImmutableStack<bool> translateStack = ImmutableStack<bool>.Empty;
         foreach(XliffSegment segment in Segments)
         {
-            if(segment.Kind is SegmentKind.Translatable && !IsComplete(segment))
+            string translatableText;
+            (translatableText, translateStack) = InlineTranslatability.Walk(segment.SourceContent, translateStack);
+
+            if(segment.Kind is SegmentKind.Translatable && !IsComplete(segment, translatableText))
             {
                 return null;
             }
@@ -116,10 +127,15 @@ public sealed record XliffUnit(
     /// and either it carries target content or its source has no translatable text at all.
     /// </summary>
     /// <param name="segment">The translatable segment to check.</param>
+    /// <param name="translatableText">
+    /// The segment's source text found translatable by <see cref="InlineTranslatability.Walk(InlineContent, ImmutableStack{bool})"/>,
+    /// carried from the unit's earlier segments rather than <see cref="InlineContent.TranslatableText"/>'s
+    /// own isolated, empty-stack walk.
+    /// </param>
     /// <returns><see langword="true"/> if the segment is complete; otherwise, <see langword="false"/>.</returns>
-    private static bool IsComplete(XliffSegment segment)
+    private static bool IsComplete(XliffSegment segment, string translatableText)
     {
         return segment.State is not SegmentState.NeedsTranslation
-            && (segment.TargetContent is not null || segment.SourceContent.TranslatableText.Length == 0);
+            && (segment.TargetContent is not null || translatableText.Length == 0);
     }
 }

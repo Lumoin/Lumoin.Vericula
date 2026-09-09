@@ -123,6 +123,27 @@ public sealed class XliffUnitTests
     }
 
     [TestMethod]
+    public void ATranslateNoSpanOpenedInOneSegmentAndClosedInALaterSegmentExemptsTheSegmentBetween()
+    {
+        //5.1/5.2: the completeness rule must carry its translate stack across the unit's segments in
+        //document order on the source side (XliffUnit.cs, RenderTarget), not evaluate each segment's
+        //translatable text from an empty stack the way InlineContent.TranslatableText does in
+        //isolation. Segment 2's own content ("Middle") looks translatable when walked on its own, so
+        //this test fails against the isolated-stack mutant (segment.SourceContent.TranslatableText)
+        //and passes only when the stack InlineTranslatability.Walk returns from segment 1 carries
+        //into segment 2's walk.
+        var openSplitNo = new AnnotationStartPart("s1", "generic", false, null, null, AnnotationForm.Split);
+        var closeSplit = new AnnotationEndPart("s1", AnnotationForm.Split);
+
+        XliffUnit unit = UnitOf(
+            new XliffSegment("seg1", SegmentKind.Translatable, InlineContent.Create([new InlineTextPart("Start "), openSplitNo]), InlineContent.FromText("Alku "), SegmentState.Translated, null),
+            new XliffSegment("seg2", SegmentKind.Translatable, InlineContent.FromText("Middle"), null, SegmentState.Initial, null),
+            new XliffSegment("seg3", SegmentKind.Translatable, InlineContent.Create([closeSplit]), null, SegmentState.Initial, null));
+
+        Assert.AreEqual("Alku Middle", unit.RenderTarget(InlineRendering.Markup));
+    }
+
+    [TestMethod]
     public void RenderSourceFoldsEverySegmentUnderTheRequestedRendering()
     {
         var placeholder = new PlaceholderPart("ph1", InlineCodeType.None, null, "[x]", null, null, null, true, true, ReorderHint.Yes, null, null);
