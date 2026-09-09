@@ -52,6 +52,60 @@ internal static class WellKnownXliffAttributes
     /// <summary>A code or annotation's full <c>prefix:value</c> sub-type per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#subType">XLIFF 2.1, subType</see>.</summary>
     public static readonly string SubType = Utf8Constants.ToInternedString(SubTypeUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="CanCopy"/>.</summary>
+    public static ReadOnlySpan<byte> CanCopyUtf8 => "canCopy"u8;
+
+    /// <summary>Whether a code may be copied per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#canCopy">XLIFF 2.1, canCopy</see>; the generator recognizes the name so an unqualified-attribute check does not refuse it, but does not read its value (5.7 remarks).</summary>
+    public static readonly string CanCopy = Utf8Constants.ToInternedString(CanCopyUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="CanDelete"/>.</summary>
+    public static ReadOnlySpan<byte> CanDeleteUtf8 => "canDelete"u8;
+
+    /// <summary>Whether a code may be deleted per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#canDelete">XLIFF 2.1, canDelete</see>; recognized but not read, like <see cref="CanCopy"/>.</summary>
+    public static readonly string CanDelete = Utf8Constants.ToInternedString(CanDeleteUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="CanOverlap"/>.</summary>
+    public static ReadOnlySpan<byte> CanOverlapUtf8 => "canOverlap"u8;
+
+    /// <summary>Whether a span may overlap another per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#canOverlap">XLIFF 2.1, canOverlap</see>; recognized but not read, like <see cref="CanCopy"/>.</summary>
+    public static readonly string CanOverlap = Utf8Constants.ToInternedString(CanOverlapUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="CanReorder"/>.</summary>
+    public static ReadOnlySpan<byte> CanReorderUtf8 => "canReorder"u8;
+
+    /// <summary>How freely a code may be reordered per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#canReorder">XLIFF 2.1, canReorder</see>; recognized but not read, like <see cref="CanCopy"/>.</summary>
+    public static readonly string CanReorder = Utf8Constants.ToInternedString(CanReorderUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="CopyOf"/>.</summary>
+    public static ReadOnlySpan<byte> CopyOfUtf8 => "copyOf"u8;
+
+    /// <summary>The identifier of the code a code was copied from per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#copyOf">XLIFF 2.1, copyOf</see>; recognized but not read, like <see cref="CanCopy"/>.</summary>
+    public static readonly string CopyOf = Utf8Constants.ToInternedString(CopyOfUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Dir"/>.</summary>
+    public static ReadOnlySpan<byte> DirUtf8 => "dir"u8;
+
+    /// <summary>The text direction of an inline element or a <c>&lt;data&gt;</c> entry per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#dir">XLIFF 2.1, dir</see>; recognized but not read, like <see cref="CanCopy"/>.</summary>
+    public static readonly string Dir = Utf8Constants.ToInternedString(DirUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="SubFlows"/>.</summary>
+    public static ReadOnlySpan<byte> SubFlowsUtf8 => "subFlows"u8;
+
+    /// <summary>The space-separated unit ids a code's sub-flow content lives in per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#subFlows">XLIFF 2.1, subFlows</see>; recognized but not read, like <see cref="CanCopy"/>.</summary>
+    public static readonly string SubFlows = Utf8Constants.ToInternedString(SubFlowsUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="SubFlowsStart"/>.</summary>
+    public static ReadOnlySpan<byte> SubFlowsStartUtf8 => "subFlowsStart"u8;
+
+    /// <summary>The <see cref="SubFlows"/> of a spanning code's start half per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#subFlowsStart">XLIFF 2.1, subFlowsStart</see>; recognized but not read, like <see cref="CanCopy"/>.</summary>
+    public static readonly string SubFlowsStart = Utf8Constants.ToInternedString(SubFlowsStartUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="SubFlowsEnd"/>.</summary>
+    public static ReadOnlySpan<byte> SubFlowsEndUtf8 => "subFlowsEnd"u8;
+
+    /// <summary>The <see cref="SubFlows"/> of a spanning code's end half per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#subFlowsEnd">XLIFF 2.1, subFlowsEnd</see>; recognized but not read, like <see cref="CanCopy"/>.</summary>
+    public static readonly string SubFlowsEnd = Utf8Constants.ToInternedString(SubFlowsEndUtf8);
+
     /// <summary>The UTF-8 source literal of <see cref="Equiv"/>.</summary>
     public static ReadOnlySpan<byte> EquivUtf8 => "equiv"u8;
 

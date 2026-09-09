@@ -167,8 +167,13 @@ public sealed partial class XliffSourceGenerator: IIncrementalGenerator
                 var targetBuilder = new StringBuilder();
                 bool sawSegment = false;
                 bool translationComplete = true;
-                InlineSideState sourceState = InlineSideState.Empty;
-                InlineSideState targetState = InlineSideState.Empty;
+
+                //§4.3.1.21 id: segment and ignorable ids share the same uniqueness scope as inline ids on
+                //their side, so both per-side states are seeded with them before any segment is parsed
+                //(mirrors the core reader's ParseUnit, 5.3.2).
+                ImmutableHashSet<string> seededIds = CollectSegmentScopeIds(unit);
+                InlineSideState sourceState = InlineSideState.Seed(seededIds);
+                InlineSideState targetState = InlineSideState.Seed(seededIds);
                 ImmutableStack<bool> translateStack = ImmutableStack<bool>.Empty;
                 foreach(XElement child in unit.Elements())
                 {
@@ -184,7 +189,12 @@ public sealed partial class XliffSourceGenerator: IIncrementalGenerator
                         continue;
                     }
 
-                    if(!TryRenderContent(child.Element(core + WellKnownXliffElements.Source), id!, data, sourceState, out ImmutableArray<RenderPart> sourceParts, out sourceState, out string? failure))
+                    //The source side is checked against every earlier segment's target ids too (XLIFF
+                    //2.1 §4.3.1.21 is symmetric: the sibling-reuse exemption only ever runs the other
+                    //way, target reusing source), mirroring the core reader's ParseSegment.
+                    InlineSideState sourceStateBeforeThisSegment = sourceState;
+                    var sourceContext = new InlineParseContext(IsTarget: false, targetState.Ids, ImmutableHashSet<string>.Empty);
+                    if(!TryRenderContent(child.Element(core + WellKnownXliffElements.Source), id!, data, sourceState, sourceContext, out ImmutableArray<RenderPart> sourceParts, out sourceState, out string? failure))
                     {
                         return Failed(source.Path, failure!, unit);
                     }
@@ -193,13 +203,19 @@ public sealed partial class XliffSourceGenerator: IIncrementalGenerator
                     sourceBuilder.Append(sourceMarkup);
                     sourcePlainBuilder.Append(RenderPlain(sourceParts));
 
+                    //XLIFF 2.1 §4.3.1.21: the only ids a target element may reuse are those of its own
+                    //sibling source element in this same segment; every id newly introduced while
+                    //parsing that source is exactly the set this segment's target is allowed to repeat.
+                    ImmutableHashSet<string> siblingSourceIds = sourceState.Ids.Except(sourceStateBeforeThisSegment.Ids);
+
                     XElement? targetElement = child.Element(core + WellKnownXliffElements.Target);
                     if(targetElement is not null)
                     {
                         anyTargetSeen = true;
                     }
 
-                    if(!TryRenderContent(targetElement, id!, data, targetState, out ImmutableArray<RenderPart> targetParts, out targetState, out failure))
+                    var targetContext = new InlineParseContext(IsTarget: true, sourceState.Ids, siblingSourceIds);
+                    if(!TryRenderContent(targetElement, id!, data, targetState, targetContext, out ImmutableArray<RenderPart> targetParts, out targetState, out failure))
                     {
                         return Failed(source.Path, failure!, unit);
                     }
@@ -280,6 +296,39 @@ public sealed partial class XliffSourceGenerator: IIncrementalGenerator
         {
             return Failed(source.Path, exception.Message, locatedAt: null);
         }
+    }
+
+    /// <summary>
+    /// Collects the ids of the unit's direct <c>&lt;segment&gt;</c> and <c>&lt;ignorable&gt;</c>
+    /// children, which seed both sides' <see cref="InlineSideState.Ids"/>: XLIFF 2.1 §4.3.1.21 puts
+    /// them in the same uniqueness scope as the unit's inline element ids. Mirrors the core reader's
+    /// <c>CollectSegmentScopeIds</c>.
+    /// </summary>
+    /// <param name="unitElement">The <c>&lt;unit&gt;</c> element.</param>
+    private static ImmutableHashSet<string> CollectSegmentScopeIds(XElement unitElement)
+    {
+        ImmutableHashSet<string>.Builder ids = ImmutableHashSet.CreateBuilder<string>(StringComparer.Ordinal);
+        foreach(XElement child in unitElement.Elements())
+        {
+            if(!WellKnownXliffNamespaces.IsCore(child.Name.NamespaceName))
+            {
+                continue;
+            }
+
+            bool segmentOrIgnorable = WellKnownXliffElements.IsSegment(child.Name.LocalName) || WellKnownXliffElements.IsIgnorable(child.Name.LocalName);
+            if(!segmentOrIgnorable)
+            {
+                continue;
+            }
+
+            string? segmentId = child.Attribute(WellKnownXliffAttributes.Id)?.Value;
+            if(segmentId is not null)
+            {
+                ids.Add(segmentId);
+            }
+        }
+
+        return ids.ToImmutable();
     }
 
     /// <summary>

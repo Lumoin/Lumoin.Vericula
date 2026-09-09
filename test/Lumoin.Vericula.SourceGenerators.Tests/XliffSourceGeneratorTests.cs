@@ -1596,6 +1596,372 @@ public sealed class XliffSourceGeneratorTests
         AssertParseFailure(result, "A <note> element inside inline content in unit 'Unrecognized' is not a recognized XLIFF inline element.");
     }
 
+    //Step 6 part 2: closing the generator's structural-fault refusals up to parity with the core
+    //reader's 5.3.2 list. Each test below carries a twin in XliffReaderInlineContentTests.cs, named in
+    //a comment, so the two paths cannot drift apart again.
+
+    [TestMethod]
+    public void APlaceholderWithAnUnsupportedAttributeIsRefusedAsVfx300()
+    {
+        //Twin: XliffReaderInlineContentTests.cs RejectsAPlaceholderWithAnUnsupportedAttribute.
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="Bogus">
+                  <segment>
+                    <source><ph id="1" bogus="x"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "carries the unsupported attribute 'bogus'");
+    }
+
+    [TestMethod]
+    public void ACodePointWithAnUnsupportedAttributeInsideDataIsRefusedAsVfx300()
+    {
+        //Twin: XliffReaderInlineContentTests.cs RejectsACodePointWithAnUnsupportedAttributeInsideData.
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="Bogus">
+                  <originalData><data id="d1"><cp hex="0009" bogus="x"/></data></originalData>
+                  <segment>
+                    <source>x</source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "carries the unsupported attribute 'bogus'");
+    }
+
+    [TestMethod]
+    public void ADuplicateDataIdIsRefusedAsVfx300()
+    {
+        //Twin: XliffReaderInlineContentTests.cs RejectsADuplicateDataId.
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="Dup">
+                  <originalData><data id="d1">a</data><data id="d1">b</data></originalData>
+                  <segment>
+                    <source>x</source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "Duplicate <data> id 'd1'");
+    }
+
+    [TestMethod]
+    public void ASecondOriginalDataElementIsRefusedAsVfx300()
+    {
+        //Twin: XliffReaderInlineContentTests.cs RejectsASecondOriginalDataElementInTheUnit.
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="TwoOriginalData">
+                  <originalData><data id="d1">a</data></originalData>
+                  <originalData><data id="d2">b</data></originalData>
+                  <segment>
+                    <source>x</source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "has more than one <originalData> element");
+    }
+
+    [TestMethod]
+    public void AForeignElementInsideDataIsRefusedAsVfx300()
+    {
+        //Twin: XliffReaderInlineContentTests.cs RejectsAForeignNamespaceElementInsideData.
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="Foreign">
+                  <originalData xmlns:ext="urn:example:ext"><data id="d1">a<ext:tag/>b</data></originalData>
+                  <segment>
+                    <source>x</source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "appears inside <data> in unit 'Foreign'");
+    }
+
+    [TestMethod]
+    public void ADataEntryWithNoIdIsRefusedAsVfx300()
+    {
+        //Twin: XliffReaderInlineContentTests.cs RejectsADataEntryWithNoId.
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="NoDataId">
+                  <originalData><data>a</data></originalData>
+                  <segment>
+                    <source>x</source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "A <data> element in unit 'NoDataId' does not declare the required id attribute.");
+    }
+
+    [TestMethod]
+    public void AMalformedIsolatedValueIsRefusedAsVfx300()
+    {
+        //Twin: XliffReaderInlineContentTests.cs RejectsAnInvalidIsolatedValueOnAStartCode. Before this
+        //step the generator read isolated through WellKnownXliffAttributeValues.IsYes directly, which
+        //coerces any non-"yes" value (including this malformed one) to false instead of refusing it.
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="BadIsolated">
+                  <segment>
+                    <source><sc id="1" isolated="maybe"/>x<ec startRef="1"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "has the isolated value 'maybe'; expected yes or no.");
+    }
+
+    [TestMethod]
+    public void AMalformedTranslateValueIsRefusedAsVfx300()
+    {
+        //Twin: XliffReaderInlineContentTests.cs RejectsAnInvalidTranslateValue. Before this step the
+        //generator read translate through WellKnownXliffAttributeValues.IsYes directly, the same
+        //coercion bug as isolated above.
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="BadTranslate">
+                  <segment>
+                    <source><mrk id="m1" translate="maybe">x</mrk></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "has the translate value 'maybe'; expected yes or no.");
+    }
+
+    [TestMethod]
+    public void ANonIsolatedEndCodeThatCarriesAnIdIsRefusedAsVfx300()
+    {
+        //Twin: XliffReaderInlineContentTests.cs RejectsANonIsolatedEndCodeThatCarriesAnId.
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="StrayId">
+                  <segment>
+                    <source><sc id="1"/>x<ec startRef="1" id="stray"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "declares an id attribute without isolated=\"yes\"");
+    }
+
+    [TestMethod]
+    public void AnAnnotationTypeThatIsNeitherReservedNorShapedAsPrefixValueIsRefusedAsVfx300()
+    {
+        //Twin: XliffReaderInlineContentTests.cs RejectsAnAnnotationTypeThatIsNeitherReservedNorShapedAsPrefixValue.
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="BadAnnotationType">
+                  <segment>
+                    <source><mrk id="m1" type="bogus">x</mrk></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "has the unsupported type 'bogus'");
+    }
+
+    [TestMethod]
+    public void ACommentAnnotationWithBothValueAndRefIsRefusedAsVfx300()
+    {
+        //Twin: XliffReaderInlineContentTests.cs RejectsACommentAnnotationWithBothValueAndRef. This gap
+        //was found while closing the assigned list: TryParseAnnotationAttributes only ever checked the
+        //"neither value nor ref" half of §4.7.3.1.3's "if and only if", never the "both" half.
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="BothValueAndRef">
+                  <segment>
+                    <source><mrk id="m1" type="comment" value="v" ref="#n=n1">x</mrk></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "has both a value and a ref attribute");
+    }
+
+    [TestMethod]
+    public void ATargetReusingAnIdFromADifferentSegmentsSourceIsRefusedAsVfx300()
+    {
+        //Twin: XliffReaderInlineContentTests.cs TargetSideRejectsReusingAnIdFromADifferentSegmentsSource.
+        //Before this step the generator tracked each side's ids independently with no cross-side check
+        //at all, so this reuse (segment 2's target reusing segment 1's source id, not its own sibling)
+        //was silently accepted.
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en" trgLang="fi">
+              <file id="wallet">
+                <unit id="CrossSegment">
+                  <segment>
+                    <source><ph id="1"/></source>
+                  </segment>
+                  <segment>
+                    <source>x</source>
+                    <target><ph id="1"/></target>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "is used more than once in unit 'CrossSegment'");
+    }
+
+    [TestMethod]
+    public void ASourceReusingAnIdAnEarlierSegmentsTargetIntroducedIsRefusedAsVfx300()
+    {
+        //Twin: XliffReaderInlineContentTests.cs SourceSideRejectsAnIdAnEarlierSegmentsTargetIntroduced.
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en" trgLang="fi">
+              <file id="wallet">
+                <unit id="TargetFirst">
+                  <segment>
+                    <source>x</source>
+                    <target><ph id="2"/></target>
+                  </segment>
+                  <segment>
+                    <source><ph id="2"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "is used more than once in unit 'TargetFirst'");
+    }
+
+    [TestMethod]
+    public void ATargetReusingTheSameIdTwiceIsRefusedEvenWhenItsSiblingSourceUsesItAsVfx300()
+    {
+        //Twin: XliffReaderInlineContentTests.cs TargetSideRejectsTheSameIdUsedTwiceEvenWhenItsSiblingSourceUsesIt.
+        //Guards against the sibling-source exemption leaking into the same-side check: the second
+        //<ph id="1"/> in the target must stay refused even though the sibling source also uses "1".
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en" trgLang="fi">
+              <file id="wallet">
+                <unit id="TwiceOnTarget">
+                  <segment>
+                    <source><ph id="1"/></source>
+                    <target><ph id="1"/><ph id="1"/></target>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "is used more than once in unit 'TwiceOnTarget'");
+    }
+
+    [TestMethod]
+    public void AnInlineIdCollidingWithAnIgnorablesIdIsRefusedAsVfx300()
+    {
+        //Twin: XliffReaderInlineContentTests.cs AnInlineIdMayNotCollideWithAnIgnorablesId. Before this
+        //step the generator seeded no segment/ignorable ids into either side's state at all.
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="IgnorableCollision">
+                  <ignorable id="i1">
+                    <source> </source>
+                  </ignorable>
+                  <segment>
+                    <source><ph id="i1"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "is used more than once in unit 'IgnorableCollision'");
+    }
+
+    [TestMethod]
+    public void ATargetElementMayReuseItsSiblingSourceElementsId()
+    {
+        //Twin: XliffReaderInlineContentTests.cs ATargetElementMayReuseItsSiblingSourceElementsId. This
+        //is the acceptance side of the cross-side id rule: it must stay accepted now that the refusals
+        //above have made the generator's cross-side check strict.
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en" trgLang="fi">
+              <file id="wallet">
+                <unit id="SiblingReuse">
+                  <segment>
+                    <source>Hi <ph id="1"/></source>
+                    <target>Hei <ph id="1"/></target>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        Assert.HasCount(0, result.Diagnostics);
+        string code = result.Results[0].GeneratedSources[0].SourceText.ToString();
+        Assert.Contains("[\"SiblingReuse\"] = \"Hei \",", code, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void ATargetElementMayIntroduceABrandNewIdAsAnAddedCode()
+    {
+        //Twin: XliffReaderInlineContentTests.cs ATargetElementMayIntroduceABrandNewIdAsAnAddedCode
+        //(XLIFF 2.1 §4.7.2.4).
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en" trgLang="fi">
+              <file id="wallet">
+                <unit id="AddedCode">
+                  <segment>
+                    <source>Hi</source>
+                    <target>Hei <ph id="added"/></target>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        Assert.HasCount(0, result.Diagnostics);
+        string code = result.Results[0].GeneratedSources[0].SourceText.ToString();
+        Assert.Contains("[\"AddedCode\"] = \"Hei \",", code, StringComparison.Ordinal);
+    }
+
     /// <summary>Asserts <paramref name="result"/> is a single VFX300 parse-failure diagnostic whose message contains <paramref name="reasonSubstring"/>, and that no source was generated.</summary>
     /// <param name="result">The generator run to check.</param>
     /// <param name="reasonSubstring">The structural-fault reason expected inside the diagnostic message.</param>

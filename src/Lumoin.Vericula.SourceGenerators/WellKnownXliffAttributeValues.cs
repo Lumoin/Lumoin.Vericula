@@ -109,6 +109,28 @@ internal static class WellKnownXliffAttributeValues
     /// <returns><see langword="true"/> if the value is other; otherwise, <see langword="false"/>.</returns>
     public static bool IsOther(string? value) => string.Equals(value, Other, StringComparison.Ordinal);
 
+    /// <summary>The UTF-8 source literal of <see cref="Generic"/>.</summary>
+    public static ReadOnlySpan<byte> GenericUtf8 => "generic"u8;
+
+    /// <summary>The default <c>type</c> value of an annotation per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#mrk">XLIFF 2.1, mrk</see>.</summary>
+    public static readonly string Generic = Utf8Constants.ToInternedString(GenericUtf8);
+
+    /// <summary>Determines if an annotation's <c>type</c> attribute value is <see cref="Generic"/>.</summary>
+    /// <param name="value">The attribute value, or null when the attribute is absent.</param>
+    /// <returns><see langword="true"/> if the value is generic; otherwise, <see langword="false"/>.</returns>
+    public static bool IsGeneric(string? value) => string.Equals(value, Generic, StringComparison.Ordinal);
+
+    /// <summary>The UTF-8 source literal of <see cref="Term"/>.</summary>
+    public static ReadOnlySpan<byte> TermUtf8 => "term"u8;
+
+    /// <summary>The annotation <c>type</c> value marking a terminology entry per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#mrk">XLIFF 2.1, mrk</see>.</summary>
+    public static readonly string Term = Utf8Constants.ToInternedString(TermUtf8);
+
+    /// <summary>Determines if an annotation's <c>type</c> attribute value is <see cref="Term"/>.</summary>
+    /// <param name="value">The attribute value, or null when the attribute is absent.</param>
+    /// <returns><see langword="true"/> if the value is term; otherwise, <see langword="false"/>.</returns>
+    public static bool IsTerm(string? value) => string.Equals(value, Term, StringComparison.Ordinal);
+
     /// <summary>The UTF-8 source literal of <see cref="Comment"/>.</summary>
     public static ReadOnlySpan<byte> CommentUtf8 => "comment"u8;
 

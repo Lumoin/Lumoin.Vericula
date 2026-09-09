@@ -140,6 +140,8 @@ public sealed class XliffReaderInlineContentTests
     [TestMethod]
     public void RejectsAPlaceholderWithAnUnsupportedAttribute()
     {
+        //Twin: XliffSourceGeneratorTests.cs APlaceholderWithAnUnsupportedAttributeIsRefusedAsVfx300
+        //(step 6 part 2: the generator's own unqualified-unknown-attribute refusal).
         XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><ph id="1" bogus="x"/></source></segment>""");
 
         Assert.Contains("carries the unsupported attribute 'bogus'", exception.Message, StringComparison.Ordinal);
@@ -384,6 +386,8 @@ public sealed class XliffReaderInlineContentTests
         //XLIFF 2.1 §4.2.3.5: id is used if and only if isolated="yes"; a non-isolated <ec> that also
         //carries id must be refused, not silently accepted with the id dropped (the reader's own
         //follow-up from the step 2 review, applied here).
+        //Twin: XliffSourceGeneratorTests.cs ANonIsolatedEndCodeThatCarriesAnIdIsRefusedAsVfx300 (step 6
+        //part 2 closes the same gap on the generator side).
         XliffFormatException exception = ReadUnitExpectingFailure(
             """<segment><source><sc id="1"/>x<ec startRef="1" id="stray"/></source></segment>""");
 
@@ -517,6 +521,9 @@ public sealed class XliffReaderInlineContentTests
     {
         //Named killer: XliffReader.InlineContent.cs (ParseAnnotationAttributes), dropping this
         //"both value and ref" guard would silently accept a comment annotation carrying both.
+        //Twin: XliffSourceGeneratorTests.cs ACommentAnnotationWithBothValueAndRefIsRefusedAsVfx300
+        //(step 6 part 2: this gap was found on the generator side while closing the assigned list, since
+        //TryParseAnnotationAttributes only ever checked the "neither" half).
         XliffFormatException exception = ReadUnitExpectingFailure(
             """<segment><source><mrk id="m1" type="comment" value="v" ref="#n=n1">x</mrk></source></segment>""");
 
@@ -540,6 +547,8 @@ public sealed class XliffReaderInlineContentTests
     public void RejectsAnAnnotationTypeThatIsNeitherReservedNorShapedAsPrefixValue()
     {
         //XLIFF 2.1 §4.3.1.40, §4.7.3.1.4: a type outside generic/term/comment must be shaped prefix:value.
+        //Twin: XliffSourceGeneratorTests.cs
+        //AnAnnotationTypeThatIsNeitherReservedNorShapedAsPrefixValueIsRefusedAsVfx300 (step 6 part 2).
         XliffFormatException exception = ReadUnitExpectingFailure(
             """<segment><source><mrk id="m1" type="bogus">x</mrk></source></segment>""");
 
@@ -744,6 +753,8 @@ public sealed class XliffReaderInlineContentTests
         //Named killer: XliffReader.InlineContent.cs (ReadDataText), dropping the RefuseUnknownAttributes
         //call on the cp arm would let a <cp> inside <data> carry an attribute a <cp> inside content
         //could never get away with.
+        //Twin: XliffSourceGeneratorTests.cs ACodePointWithAnUnsupportedAttributeInsideDataIsRefusedAsVfx300
+        //(step 6 part 2).
         XliffFormatException exception = ReadUnitExpectingFailure("""
             <originalData><data id="d1"><cp hex="0009" bogus="x"/></data></originalData>
             <segment><source>x</source></segment>
@@ -835,9 +846,36 @@ public sealed class XliffReaderInlineContentTests
     [TestMethod]
     public void RejectsAnInvalidTranslateValue()
     {
+        //Twin: XliffSourceGeneratorTests.cs AMalformedTranslateValueIsRefusedAsVfx300 (step 6 part 2:
+        //the generator used to coerce a malformed translate value through IsYes instead of refusing it).
         XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><mrk id="m1" translate="maybe">x</mrk></source></segment>""");
 
         Assert.Contains("has the translate value 'maybe'; expected yes or no", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void RejectsAnInvalidIsolatedValueOnAStartCode()
+    {
+        //Twin: XliffSourceGeneratorTests.cs AMalformedIsolatedValueIsRefusedAsVfx300 (step 6 part 2: the
+        //generator used to coerce a malformed isolated value through IsYes instead of refusing it). The
+        //reader already refuses this through the same ParseYesNo every other yes/no attribute uses, but
+        //had no dedicated test naming isolated specifically until now.
+        XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><sc id="1" isolated="maybe"/>x<ec startRef="1"/></source></segment>""");
+
+        Assert.Contains("has the isolated value 'maybe'; expected yes or no", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void RejectsADataEntryWithNoId()
+    {
+        //Twin: XliffSourceGeneratorTests.cs ADataEntryWithNoIdIsRefusedAsVfx300 (step 6 part 2: the
+        //generator used to silently drop a <data> entry with no id instead of refusing it).
+        XliffFormatException exception = ReadUnitExpectingFailure("""
+            <originalData><data>a</data></originalData>
+            <segment><source>x</source></segment>
+            """);
+
+        Assert.Contains("A <data> element does not declare the required id attribute", exception.Message, StringComparison.Ordinal);
     }
 
     [TestMethod]
@@ -920,6 +958,7 @@ public sealed class XliffReaderInlineContentTests
     [TestMethod]
     public void RejectsADuplicateDataId()
     {
+        //Twin: XliffSourceGeneratorTests.cs ADuplicateDataIdIsRefusedAsVfx300 (step 6 part 2).
         XliffFormatException exception = ReadUnitExpectingFailure("""
             <originalData><data id="d1">a</data><data id="d1">b</data></originalData>
             <segment><source>x</source></segment>
@@ -934,6 +973,7 @@ public sealed class XliffReaderInlineContentTests
         //Named killer: XliffReader.InlineContent.cs (ParseOriginalData), dropping the
         //`if(originalDataElement is not null)` guard would silently keep only the first
         //<originalData> element's entries instead of refusing the second one.
+        //Twin: XliffSourceGeneratorTests.cs ASecondOriginalDataElementIsRefusedAsVfx300 (step 6 part 2).
         XliffFormatException exception = ReadUnitExpectingFailure("""
             <originalData><data id="d1">a</data></originalData>
             <originalData><data id="d2">b</data></originalData>
@@ -949,6 +989,7 @@ public sealed class XliffReaderInlineContentTests
         //Named killer: XliffReader.InlineContent.cs (ReadDataText), dropping the trailing
         //`case(XElement element): throw ...` arm would silently ignore any element that is not a core
         //<cp>, letting "a<ext:tag>hidden</ext:tag>b" read as "ab" instead of being refused.
+        //Twin: XliffSourceGeneratorTests.cs AForeignElementInsideDataIsRefusedAsVfx300 (step 6 part 2).
         XliffFormatException exception = ReadUnitExpectingFailure(
             """<originalData xmlns:ext="urn:example:ext"><data id="d1">a<ext:tag/>b</data></originalData><segment><source>x</source></segment>""");
 
@@ -958,6 +999,8 @@ public sealed class XliffReaderInlineContentTests
     [TestMethod]
     public void ATargetElementMayReuseItsSiblingSourceElementsId()
     {
+        //Twin: XliffSourceGeneratorTests.cs ATargetElementMayReuseItsSiblingSourceElementsId (step 6
+        //part 2: the generator gains this same exemption, where before it had no cross-side check at all).
         XliffUnit unit = ReadUnit("""<segment><source>Hi <ph id="1"/></source><target>Hei <ph id="1"/></target></segment>""");
 
         Assert.AreEqual("1", ((PlaceholderPart)unit.Segments[0].SourceContent.Parts[1]).Id);
@@ -971,6 +1014,8 @@ public sealed class XliffReaderInlineContentTests
         //exemption to the same-side check (instead of only the cross-side one) would let the second
         //<ph id="1"/> in the target below pass, because its sibling source also uses "1": the exemption
         //covers one reuse of the source's id, not a second use on the target's own side.
+        //Twin: XliffSourceGeneratorTests.cs
+        //ATargetReusingTheSameIdTwiceIsRefusedEvenWhenItsSiblingSourceUsesItAsVfx300 (step 6 part 2).
         XliffFormatException exception = ReadUnitExpectingFailure(
             """<segment><source><ph id="1"/></source><target><ph id="1"/><ph id="1"/></target></segment>""");
 
@@ -981,6 +1026,7 @@ public sealed class XliffReaderInlineContentTests
     public void ATargetElementMayIntroduceABrandNewIdAsAnAddedCode()
     {
         //XLIFF 2.1 §4.7.2.4: a target-side code whose id matches no source code is an added code.
+        //Twin: XliffSourceGeneratorTests.cs ATargetElementMayIntroduceABrandNewIdAsAnAddedCode (step 6 part 2).
         XliffUnit unit = ReadUnit("""<segment><source>Hi</source><target>Hei <ph id="added"/></target></segment>""");
 
         Assert.AreEqual("added", ((PlaceholderPart)unit.Segments[0].TargetContent!.Parts[1]).Id);
@@ -998,6 +1044,9 @@ public sealed class XliffReaderInlineContentTests
     [TestMethod]
     public void TargetSideRejectsReusingAnIdFromADifferentSegmentsSource()
     {
+        //Twin: XliffSourceGeneratorTests.cs
+        //ATargetReusingAnIdFromADifferentSegmentsSourceIsRefusedAsVfx300 (step 6 part 2: the generator
+        //had no cross-side check at all before, so this reuse used to be silently accepted there).
         //segment 2's target tries to reuse segment 1's source id, which is not its own sibling.
         //Named killer: XliffReader.cs:921 (now unchanged in position by this fix), dropping
         //`.Except(sourceState.Ids)` from siblingSourceIds's computation would make it the cumulative set
@@ -1031,6 +1080,8 @@ public sealed class XliffReaderInlineContentTests
         //with ImmutableHashSet<string>.Empty as OtherSideIds instead of the incoming targetState.Ids
         //would leave segment 2's source unaware that segment 1's target already introduced id "2" as an
         //added code, so the <ph id="2"/> below would wrongly be accepted instead of refused.
+        //Twin: XliffSourceGeneratorTests.cs
+        //ASourceReusingAnIdAnEarlierSegmentsTargetIntroducedIsRefusedAsVfx300 (step 6 part 2).
         XliffFormatException exception = ReadUnitExpectingFailure("""
             <segment><source>x</source><target><ph id="2"/></target></segment>
             <segment><source><ph id="2"/></source></segment>
@@ -1054,6 +1105,8 @@ public sealed class XliffReaderInlineContentTests
         //Named killer: XliffReader.InlineContent.cs:153 CollectSegmentScopeIds's
         //`IsSegment(...) || IsIgnorable(...)` mutated to drop the IsIgnorable half would stop seeding
         //an ignorable's id into the unit's shared id scope, silently letting an inline element reuse it.
+        //Twin: XliffSourceGeneratorTests.cs AnInlineIdCollidingWithAnIgnorablesIdIsRefusedAsVfx300 (step
+        //6 part 2: the generator had no segment/ignorable id seeding at all before this).
         XliffFormatException exception = ReadUnitExpectingFailure(
             """<ignorable id="i1"><source> </source></ignorable><segment><source><ph id="i1"/></source></segment>""");
 
