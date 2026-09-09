@@ -852,4 +852,496 @@ public sealed class XliffWriterInlineContentTests
 
         AssertUnitRejected(unit, "has both a value and a ref attribute");
     }
+
+    //---- Named killers: step 6b Stryker census survivors --------------------------------------------
+    //S-054 (line 83) and S-055 (line 111) are not tested here: proven EQUIVALENT below (a nested
+    //Paired/Marker start's own WriteString(string.Empty) prime is unobservable, because the enclosing
+    //<source>/<target>'s own prime, written unconditionally by WriteInlineContent before any content is
+    //ever reached, suppresses the indenting writer's mixed-content indentation for its whole subtree
+    //regardless of depth; removing a nested prime changes nothing as long as the ancestor's own prime
+    //still runs, which it always does on every path into WriteContentParts).
+
+    [TestMethod]
+    public void WritesEveryStartCodeAttributeWhenItDiffersFromTheDefault()
+    {
+        //Kills XliffWriter.InlineContent.cs:214,215,217,218,219,220,221,223,224,225 (WriteStartCode)
+        //and contributes to :515 (the shared WriteDirectionIfNotInherited statement): the Sc() helper
+        //hardcodes every one of these at its default, so no writer test gave a Split <sc> a
+        //non-default value for any of them before this.
+        StartCodePart part = Sc("1", type: InlineCodeType.Other) with
+        {
+            SubType = "vcl:custom",
+            Direction = TextDirection.RightToLeft,
+            DataRef = "d1",
+            Equiv = "[x]",
+            Disp = "<x/>",
+            CanCopy = false,
+            CanDelete = false,
+            CanReorder = ReorderHint.No,
+            CopyOf = "0",
+            SubFlows = "u2",
+            OriginalData = new OriginalData("<x/>")
+        };
+        XliffUnit unit = UnitOf(part, new InlineTextPart("x"), Ec("1"));
+
+        string xml = Encoding.UTF8.GetString(WriteToBytes(DocumentOf(unit)));
+
+        Assert.Contains("subType=\"vcl:custom\"", xml);
+        Assert.Contains("dir=\"rtl\"", xml);
+        Assert.Contains("dataRef=\"d1\"", xml);
+        Assert.Contains("equiv=\"[x]\"", xml);
+        Assert.Contains("disp=\"&lt;x/&gt;\"", xml);
+        Assert.Contains("canCopy=\"no\"", xml);
+        Assert.Contains("canDelete=\"no\"", xml);
+        Assert.Contains("canReorder=\"no\"", xml);
+        Assert.Contains("copyOf=\"0\"", xml);
+        Assert.Contains("subFlows=\"u2\"", xml);
+    }
+
+    [TestMethod]
+    public void WritesDirOnAnIsolatedEndCodeWhenDirectionIsSet()
+    {
+        //Kills XliffWriter.InlineContent.cs:237 (WriteEndCode, Isolated branch): dropping
+        //WriteDirectionIfNotInherited there would omit dir even though XLIFF 2.1 §4.2.3.5 allows it
+        //precisely on an isolated end code; RoundTripsAnIsolatedEndCodeWithItsOwnId never sets
+        //Direction away from its Inherited default.
+        XliffUnit unit = UnitOf(new InlineTextPart("x"), IsolatedEc("z") with { Direction = TextDirection.RightToLeft });
+
+        string xml = Encoding.UTF8.GetString(WriteToBytes(DocumentOf(unit)));
+
+        Assert.Contains("<ec id=\"z\" isolated=\"yes\" dir=\"rtl\" />", xml);
+    }
+
+    [TestMethod]
+    public void WritesEveryEndCodeAttributeWhenItDiffersFromTheDefault()
+    {
+        //Kills XliffWriter.InlineContent.cs:244-254 (WriteEndCode's shared attribute writes): the
+        //Ec() helper hardcodes every one of these at its default; OmitsCanOverlapOnAnScWhenTrueAndWritesItWhenFalse
+        //only varies CanOverlap on the start code, never on the end code, so that gap needed its own
+        //case here too.
+        EndCodePart end = Ec("1") with
+        {
+            Type = InlineCodeType.Other,
+            SubType = "vcl:custom",
+            Equiv = "[/x]",
+            Disp = "</x>",
+            DataRef = "d1",
+            OriginalData = new OriginalData("</x>"),
+            CanCopy = false,
+            CanDelete = false,
+            CanOverlap = false,
+            CanReorder = ReorderHint.No,
+            CopyOf = "0",
+            SubFlows = "u2"
+        };
+        XliffUnit unit = UnitOf(Sc("1"), new InlineTextPart("x"), end);
+
+        string xml = Encoding.UTF8.GetString(WriteToBytes(DocumentOf(unit)));
+
+        Assert.Contains("type=\"other\"", xml);
+        Assert.Contains("subType=\"vcl:custom\"", xml);
+        Assert.Contains("dataRef=\"d1\"", xml);
+        Assert.Contains("equiv=\"[/x]\"", xml);
+        Assert.Contains("disp=\"&lt;/x&gt;\"", xml);
+        Assert.Contains("canCopy=\"no\"", xml);
+        Assert.Contains("canDelete=\"no\"", xml);
+        Assert.Contains("canOverlap=\"no\"", xml);
+        Assert.Contains("canReorder=\"no\"", xml);
+        Assert.Contains("copyOf=\"0\"", xml);
+        Assert.Contains("subFlows=\"u2\"", xml);
+    }
+
+    [TestMethod]
+    public void WritesEveryPairedCodeAttributeWhenItDiffersFromTheDefault()
+    {
+        //Kills XliffWriter.InlineContent.cs:272-285 (WritePairedCodeStart), including the
+        //defaultValue:true args on canCopy/canDelete at 279/280, and contributes to :515 (the shared
+        //WriteDirectionIfNotInherited statement): no writer test built a <pc> whose shared or
+        //half-specific attributes differ from their spec defaults before this (the corpus's b1 span
+        //only sets type/subType, already covering lines 270-271). The end half repeats the shared
+        //attributes (CanCopy, CanDelete, CanReorder, CopyOf, Direction) because PairedHalvesProblems
+        //refuses a mismatch between a pc's two halves; only the start's values are ever written for
+        //those.
+        StartCodePart start = PcStart("1") with
+        {
+            Direction = TextDirection.RightToLeft,
+            DataRef = "ds",
+            Equiv = "[b",
+            Disp = "<b>",
+            CanCopy = false,
+            CanDelete = false,
+            CanReorder = ReorderHint.No,
+            CopyOf = "0",
+            SubFlows = "u1",
+            OriginalData = new OriginalData("<b>")
+        };
+        EndCodePart end = PcEnd("1") with
+        {
+            DataRef = "de",
+            Equiv = "[/b",
+            Disp = "</b>",
+            SubFlows = "u2",
+            OriginalData = new OriginalData("</b>"),
+            CanCopy = false,
+            CanDelete = false,
+            CanReorder = ReorderHint.No,
+            CopyOf = "0",
+            Direction = TextDirection.RightToLeft
+        };
+        XliffUnit unit = UnitOf(start, new InlineTextPart("x"), end);
+
+        string xml = Encoding.UTF8.GetString(WriteToBytes(DocumentOf(unit)));
+
+        Assert.Contains("dir=\"rtl\"", xml);
+        Assert.Contains("dataRefStart=\"ds\"", xml);
+        Assert.Contains("dataRefEnd=\"de\"", xml);
+        Assert.Contains("equivStart=\"[b\"", xml);
+        Assert.Contains("equivEnd=\"[/b\"", xml);
+        Assert.Contains("dispStart=\"&lt;b&gt;\"", xml);
+        Assert.Contains("dispEnd=\"&lt;/b&gt;\"", xml);
+        Assert.Contains("canCopy=\"no\"", xml);
+        Assert.Contains("canDelete=\"no\"", xml);
+        Assert.Contains("canReorder=\"no\"", xml);
+        Assert.Contains("copyOf=\"0\"", xml);
+        Assert.Contains("subFlowsStart=\"u1\"", xml);
+        Assert.Contains("subFlowsEnd=\"u2\"", xml);
+    }
+
+    [TestMethod]
+    public void WritesTranslateYesWhenTranslateIsTrue()
+    {
+        //Kills XliffWriter.InlineContent.cs:314 (WriteAnnotationAttributes): every existing translate
+        //test only ever sets Translate=false (translate="no"), so a mutant that always writes "no"
+        //coincidentally matches; nothing exercises Translate=true.
+        XliffUnit unit = UnitOf(Mrk("m", translate: true), new InlineTextPart("x"), MrkEnd("m"));
+
+        string xml = Encoding.UTF8.GetString(WriteToBytes(DocumentOf(unit)));
+
+        Assert.Contains("translate=\"yes\"", xml);
+    }
+
+    [TestMethod]
+    public void EncodesATrailingLoneHighSurrogateAsACodePointWithoutThrowing()
+    {
+        //Kills XliffWriter.InlineContent.cs:344 (WriteInlineText's validPair check, all three
+        //mutants: && => ||, the < => <= length check, and index+1 => index-1 in that check): for a
+        //lone high surrogate that is the string's LAST character, each mutant lets validPair either
+        //evaluate true or read text[index+1] out of range instead of short-circuiting; every existing
+        //surrogate test has a trailing character after the surrogate, so this boundary was untested.
+        XliffUnit unit = UnitOf(new InlineTextPart("a\uD800"));
+
+        string xml = Encoding.UTF8.GetString(WriteToBytes(DocumentOf(unit)));
+
+        Assert.Contains("<cp hex=\"D800\" />", xml);
+    }
+
+    [TestMethod]
+    public void EncodesTwoSeparateCodePointsWithOrdinaryTextBetweenThem()
+    {
+        //Kills XliffWriter.InlineContent.cs:361 (WriteInlineText's pending-text flush): once start
+        //has advanced past zero from an earlier <cp>, index-start => index+start overshoots the
+        //substring length and throws instead of writing "b"; the existing single-cp tests only ever
+        //flush once, with start still 0, where the two expressions coincide.
+        XliffUnit unit = UnitOf(new InlineTextPart("abc"));
+
+        string xml = Encoding.UTF8.GetString(WriteToBytes(DocumentOf(unit)));
+
+        Assert.Contains("<source>a<cp hex=\"0003\" />b<cp hex=\"0007\" />c</source>", xml);
+    }
+
+    [TestMethod]
+    public void NamesTheSourceSideInASplitPairingViolationMessage()
+    {
+        //Kills XliffWriter.InlineContent.cs:785 (SplitPairingProblems): the always-"target" and the
+        //"source"=>"" mutants both mislabel a source-side violation; every existing split-pairing
+        //test only asserted a side-agnostic message fragment.
+        XliffUnit unit = UnitOf(new InlineTextPart("x"), Ec("ghost"));
+
+        AssertUnitRejected(unit, "An <ec> in the source of unit 'u' has startRef 'ghost'");
+    }
+
+    [TestMethod]
+    public void NamesTheTargetSideInASplitPairingViolationMessage()
+    {
+        //Kills XliffWriter.InlineContent.cs:573 (the isTarget:true call collapsing to isTarget:false),
+        //:575 (its propagation into InlineUnitProblems), :785 (the always-"source" and "target"=>""
+        //mutants) and :788 (isTarget ? TargetContent : SourceContent collapsing to always
+        //SourceContent): a clean source with only a broken target must still be refused, and the
+        //message must name the target; no existing test builds a target-only split-pairing violation.
+        var segment = new XliffSegment(null, SegmentKind.Translatable, InlineContent.FromText("x"), InlineContent.Create([Ec("ghost")]), SegmentState.Initial, null);
+        var unit = new XliffUnit("u", [segment], ImmutableArray<string>.Empty, ImmutableArray<Scope>.Empty, ImmutableDictionary<string, string>.Empty, null);
+
+        AssertUnitRejected(unit, "An <ec> in the target of unit 'u' has startRef 'ghost'");
+    }
+
+    [TestMethod]
+    public void RejectsATargetInlineIdThatCollidesWithTheSegmentId()
+    {
+        //Kills XliffWriter.InlineContent.cs:625 (DuplicateInlineIdProblems, target loop): a target
+        //inline id equal to the segment's own id, used only once on the target and not reused from
+        //source, is reported under the real ||-chain but silently dropped once the first two operands
+        //become a conjunction (&&); RejectsAnInlineIdThatCollidesWithASegmentId only covers the
+        //source-side collision (line 610).
+        var segment = new XliffSegment("dup", SegmentKind.Translatable, InlineContent.FromText("x"), InlineContent.Create([Ph("dup")]), SegmentState.Initial, null);
+        var unit = new XliffUnit("u", [segment], ImmutableArray<string>.Empty, ImmutableArray<Scope>.Empty, ImmutableDictionary<string, string>.Empty, null);
+
+        AssertUnitRejected(unit, "The inline id 'dup' is used more than once");
+    }
+
+    [TestMethod]
+    public void RejectsTheSameIsolatedEndCodeIdUsedTwice()
+    {
+        //Kills XliffWriter.InlineContent.cs:647 (InlineIdsOf): flipping the Isolated guard to false
+        //stops an isolated end code's own id from ever being registered, so a repeated isolated
+        //end-code id is never flagged as a duplicate; no existing test reuses one.
+        XliffUnit unit = UnitOf(new InlineTextPart("a"), IsolatedEc("z"), new InlineTextPart("b"), IsolatedEc("z"));
+
+        AssertUnitRejected(unit, "The inline id 'z' is used more than once");
+    }
+
+    [TestMethod]
+    public void NamesTheSourceSideInAPairedNestingViolationMessage()
+    {
+        //Kills XliffWriter.InlineContent.cs:673 ($"the source of unit '{unit.Id}'" => $""):
+        //RejectsAPairedSpanThatCrossesAnotherInsteadOfNesting only asserts the generic "does not
+        //close the innermost open span" fragment, never the side-naming prefix.
+        XliffUnit unit = UnitOf(PcStart("a"), PcStart("b"), new InlineTextPart("x"), PcEnd("a"), PcEnd("b"));
+
+        AssertUnitRejected(unit, "A </pc> in the source of unit 'u' does not close the innermost open span");
+    }
+
+    [TestMethod]
+    public void NamesTheTargetSideInAPairedNestingViolationMessage()
+    {
+        //Kills XliffWriter.InlineContent.cs:680 ($"the target of unit '{unit.Id}'" => $"") and :682
+        //(the foreach body that propagates a target-side nesting problem): no existing test builds a
+        //target-side Paired/Marker nesting violation.
+        var segment = new XliffSegment(null, SegmentKind.Translatable, InlineContent.FromText("x"), InlineContent.Create([PcStart("a"), PcStart("b"), new InlineTextPart("y"), PcEnd("a"), PcEnd("b")]), SegmentState.Initial, null);
+        var unit = new XliffUnit("u", [segment], ImmutableArray<string>.Empty, ImmutableArray<Scope>.Empty, ImmutableDictionary<string, string>.Empty, null);
+
+        AssertUnitRejected(unit, "A </pc> in the target of unit 'u' does not close the innermost open span");
+    }
+
+    [TestMethod]
+    public void RejectsAStartCodeIdThatIsNotAnXmlNameToken()
+    {
+        //Kills XliffWriter.InlineContent.cs:965 ($"inline id in {what}" => $"") and :967 (the foreach
+        //body that propagates it): RejectsAnInlineIdThatIsNotAnXmlNameToken only exercises a
+        //Placeholder's id, never a StartCodePart's.
+        XliffUnit unit = UnitOf(Sc("bad id"), new InlineTextPart("x"), Ec("bad id"));
+
+        AssertUnitRejected(unit, "inline id in the source of unit 'u' is not an XML name token");
+    }
+
+    [TestMethod]
+    public void RejectsAnIsolatedEndCodeIdThatIsNotAnXmlNameToken()
+    {
+        //Kills XliffWriter.InlineContent.cs:986 ($"inline id in {what}" => $"") and :990 (the shared
+        //idProblems foreach body): no existing test gives an isolated end code an invalid Id.
+        XliffUnit unit = UnitOf(new InlineTextPart("x"), IsolatedEc("bad id"));
+
+        AssertUnitRejected(unit, "inline id in the source of unit 'u' is not an XML name token");
+    }
+
+    [TestMethod]
+    public void RejectsAnEndCodeStartRefThatIsNotAnXmlNameToken()
+    {
+        //Kills XliffWriter.InlineContent.cs:987 ($"inline startRef in {what}" => $""): no existing
+        //test gives a non-isolated end code an invalid StartRef.
+        XliffUnit unit = UnitOf(new InlineTextPart("x"), Ec("bad ref"));
+
+        AssertUnitRejected(unit, "inline startRef in the source of unit 'u' is not an XML name token");
+    }
+
+    [TestMethod]
+    public void RejectsAStartCodeDataRefAndCopyOfThatAreNotXmlNameTokens()
+    {
+        //Kills XliffWriter.InlineContent.cs:972 (the CodeReferenceProblems foreach body in the
+        //StartCodePart arm): only PlaceholderPart's dataRef/copyOf are tested for name-token shape
+        //today.
+        StartCodePart start = Sc("1") with { DataRef = "bad ref", CopyOf = "bad copy", OriginalData = new OriginalData("x") };
+        XliffUnit unit = UnitOf(start, new InlineTextPart("x"), Ec("1"));
+
+        AssertUnitRejected(unit, "dataRef in the source of unit 'u' is not an XML name token");
+    }
+
+    [TestMethod]
+    public void RejectsAStartCodeEquivContainingACharacterXmlCannotCarry()
+    {
+        //Kills XliffWriter.InlineContent.cs:977 (the CodeTextFieldProblems foreach body in the
+        //StartCodePart arm): only PlaceholderPart's text fields are tested for XML-text validity
+        //today.
+        StartCodePart start = Sc("1") with { Equiv = "badequiv" };
+        XliffUnit unit = UnitOf(start, new InlineTextPart("x"), Ec("1"));
+
+        AssertUnitRejected(unit, "an equiv in the source of unit 'u' contains a character XML cannot carry");
+    }
+
+    [TestMethod]
+    public void RejectsAnEndCodeDataRefAndCopyOfThatAreNotXmlNameTokens()
+    {
+        //Kills XliffWriter.InlineContent.cs:1000 (the CodeReferenceProblems foreach body in the
+        //EndCodePart arm): only PlaceholderPart's dataRef/copyOf are tested for name-token shape
+        //today.
+        EndCodePart end = Ec("1") with { DataRef = "bad ref", CopyOf = "bad copy", OriginalData = new OriginalData("x") };
+        XliffUnit unit = UnitOf(Sc("1"), new InlineTextPart("x"), end);
+
+        AssertUnitRejected(unit, "dataRef in the source of unit 'u' is not an XML name token");
+    }
+
+    [TestMethod]
+    public void RejectsAnEndCodeEquivContainingACharacterXmlCannotCarry()
+    {
+        //Kills XliffWriter.InlineContent.cs:1005 (the CodeTextFieldProblems foreach body in the
+        //EndCodePart arm): only PlaceholderPart's text fields are tested for XML-text validity today.
+        EndCodePart end = Ec("1") with { Equiv = "badequiv" };
+        XliffUnit unit = UnitOf(Sc("1"), new InlineTextPart("x"), end);
+
+        AssertUnitRejected(unit, "an equiv in the source of unit 'u' contains a character XML cannot carry");
+    }
+
+    [TestMethod]
+    public void RejectsAnAnnotationIdThatIsNotAnXmlNameToken()
+    {
+        //Kills XliffWriter.InlineContent.cs:1013 ($"inline id in {what}" => $"") and :1015 (the
+        //NameTokenProblems foreach body in the AnnotationStartPart arm): no existing test gives an
+        //mrk/sm annotation an invalid id.
+        XliffUnit unit = UnitOf(Mrk("bad id"), new InlineTextPart("x"), MrkEnd("bad id"));
+
+        AssertUnitRejected(unit, "inline id in the source of unit 'u' is not an XML name token");
+    }
+
+    [TestMethod]
+    public void RejectsAnAnnotationEndStartRefThatIsNotAnXmlNameToken()
+    {
+        //Kills XliffWriter.InlineContent.cs:1056 ($"inline startRef in {what}" => $"") and :1058 (the
+        //NameTokenProblems foreach body in the AnnotationEndPart arm): no existing test gives an em
+        //an invalid StartRef.
+        XliffUnit unit = UnitOf(new InlineTextPart("x"), Em("bad ref"));
+
+        AssertUnitRejected(unit, "inline startRef in the source of unit 'u' is not an XML name token");
+    }
+
+    [TestMethod]
+    public void RejectsACopyOfContainingACharacterXmlCannotCarry()
+    {
+        //Kills XliffWriter.InlineContent.cs:1105 (the CodeTextFieldProblems copyOf check) and :1107
+        //(its XmlTextProblems foreach body): RejectsACopyOfThatIsNotAnXmlNameToken only exercises the
+        //NameTokenProblems shape check (a different call, CodeReferenceProblems); nothing gives
+        //copyOf a character XmlTextProblems rejects.
+        XliffUnit unit = UnitOf(Ph("1", copyOf: "badcopy"));
+
+        AssertUnitRejected(unit, "a copyOf in the source of unit 'u' contains a character XML cannot carry");
+    }
+
+    [TestMethod]
+    public void WritesNestedMarkerAnnotationsWithCorrectNesting()
+    {
+        //Kills XliffWriter.InlineContent.cs:175 (FindMatchingMarkerEnd's depth++, both removed and
+        //flipped to depth--): no writer test nests one Marker annotation inside another, so the depth
+        //counter that distinguishes a nested mrk's own end from the outer mrk's end is never
+        //exercised past 1; without it the search for the outer's end stops at the inner's own end
+        //instead, and the leftover outer end is then reached as an unmatched part.
+        XliffUnit unit = UnitOf(Mrk("outer"), new InlineTextPart("a"), Mrk("inner"), new InlineTextPart("b"), MrkEnd("inner"), new InlineTextPart("c"), MrkEnd("outer"));
+
+        string xml = Encoding.UTF8.GetString(WriteToBytes(DocumentOf(unit)));
+
+        Assert.Contains("<mrk id=\"outer\">a<mrk id=\"inner\">b</mrk>c</mrk>", xml);
+    }
+
+    [TestMethod]
+    public void ThrowsForAnUndefinedReorderHintValue()
+    {
+        //Kills XliffWriter.InlineContent.cs:504 (WriteReorderIfNotDefault's default arm): ReorderHint
+        //is a public field on public records and nothing in Problems() range-checks it, so a caller
+        //can construct an out-of-range value that only the actual write phase catches.
+        XliffUnit unit = UnitOf(Ph("1", canReorder: (ReorderHint)99));
+
+        ArgumentOutOfRangeException exception = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => XliffWriter.Write(DocumentOf(unit), new MemoryStream()));
+
+        Assert.Contains("Unknown reorder hint.", exception.Message);
+    }
+
+    [TestMethod]
+    public void ThrowsWhenOriginalDataDirectionIsInherited()
+    {
+        //Kills XliffWriter.InlineContent.cs:527 (DirectionAttributeValue's default arm):
+        //OriginalData.Direction defaults to Auto, but nothing stops a caller constructing it as
+        //TextDirection.Inherited directly, and WriteOriginalDataElement only guards against Auto
+        //before calling DirectionAttributeValue.
+        XliffUnit unit = UnitOf(Ph("1", dataRef: "d1", originalData: new OriginalData("x", TextDirection.Inherited)));
+
+        ArgumentOutOfRangeException exception = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => XliffWriter.Write(DocumentOf(unit), new MemoryStream()));
+
+        Assert.Contains("A direction of Inherited, or an undefined value, has no dir attribute value.", exception.Message);
+    }
+
+    [TestMethod]
+    public void ThrowsForAnUndefinedInlineCodeTypeValue()
+    {
+        //Kills XliffWriter.InlineContent.cs:543 (WriteCodeTypeIfPresent's default arm): same gap as
+        //ThrowsForAnUndefinedReorderHintValue, for InlineCodeType instead of ReorderHint.
+        XliffUnit unit = UnitOf(Ph("1", type: (InlineCodeType)99));
+
+        ArgumentOutOfRangeException exception = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => XliffWriter.Write(DocumentOf(unit), new MemoryStream()));
+
+        Assert.Contains("Unknown inline code type.", exception.Message);
+    }
+
+    [TestMethod]
+    public void RejectsAMarkerAnnotationEndThatCrossesAPairedSpanInsteadOfNesting()
+    {
+        //Kills XliffWriter.InlineContent.cs:732 (both the yield statement and its message text):
+        //RejectsAMarkerAnnotationThatCrossesAPairedSpanInsteadOfNesting only crosses a </pc> out from
+        //under an open mrk (the EndCodePart branch's message, line 714); no test crosses a </mrk> out
+        //from under an open pc the other way, which is the only way to reach this branch.
+        XliffUnit unit = UnitOf(Mrk("m"), PcStart("a"), new InlineTextPart("x"), MrkEnd("m"), PcEnd("a"));
+
+        AssertUnitRejected(unit, "A </mrk> in the source of unit 'u' does not close the innermost open span");
+    }
+
+    [TestMethod]
+    public void RejectsOriginalDataCarriedWithoutADataRefOnTheTargetSide()
+    {
+        //Kills XliffWriter.InlineContent.cs:873 (the target-side OriginalDataConsistencyProblems
+        //propagation): RejectsOriginalDataCarriedWithoutADataRef only builds source content via
+        //UnitOf; the target-side call is never exercised.
+        var segment = new XliffSegment(null, SegmentKind.Translatable, InlineContent.FromText("x"), InlineContent.Create([Ph("1", originalData: new OriginalData("y"))]), SegmentState.Initial, null);
+        var unit = new XliffUnit("u", [segment], ImmutableArray<string>.Empty, ImmutableArray<Scope>.Empty, ImmutableDictionary<string, string>.Empty, null);
+
+        AssertUnitRejected(unit, "carries original data without a dataRef");
+    }
+
+    [TestMethod]
+    public void WritesEveryPartKindWithoutHangingOnAMissingIndexAdvance()
+    {
+        //Kills XliffWriter.InlineContent.cs:57,65,73,84,94,102,112,122 (WriteContentParts): removing
+        //or flipping the index advance for any part kind leaves the loop unable to progress past it,
+        //hanging instead of completing; Stryker's own timeout already flags these as detected, but
+        //nothing before this turned that into a fast, named, deterministic assertion.
+        XliffUnit unit = UnitOf(
+            new InlineTextPart("a"),
+            Ph("1"),
+            Sc("sp1"), new InlineTextPart("b"), Ec("sp1"),
+            PcStart("pc1"), new InlineTextPart("c"), PcEnd("pc1"),
+            Sm("sm1"), new InlineTextPart("d"), Em("sm1"),
+            Mrk("mk1"), new InlineTextPart("e"), MrkEnd("mk1"));
+
+        Task<byte[]> task = Task.Run(() => WriteToBytes(DocumentOf(unit)));
+
+        Assert.IsTrue(task.Wait(TimeSpan.FromSeconds(5)), "WriteInlineContent did not complete in time; a part kind's index was not advanced.");
+    }
+
+    [TestMethod]
+    public void EncodesConsecutiveCodePointsWithoutHangingOnAMissingIndexAdvance()
+    {
+        //Kills XliffWriter.InlineContent.cs:367 (WriteInlineText, after encoding a <cp>):
+        //index += 1 => index -= 1 sends index backward, re-encoding the same and preceding characters
+        //forever instead of advancing past the encoded code point.
+        XliffUnit unit = UnitOf(new InlineTextPart("abc"));
+
+        Task<byte[]> task = Task.Run(() => WriteToBytes(DocumentOf(unit)));
+
+        Assert.IsTrue(task.Wait(TimeSpan.FromSeconds(5)), "WriteInlineText did not complete in time; index was not advanced past an encoded code point.");
+    }
 }
