@@ -1200,4 +1200,179 @@ public sealed class XliffReaderInlineContentTests
         Assert.AreEqual("bold", ((InlineTextPart)content.Parts[2]).Text);
         Assert.AreEqual("1", ((EndCodePart)content.Parts[3]).StartRef);
     }
+
+    [TestMethod]
+    public void RejectsADataEntryWithAnUnsupportedAttribute()
+    {
+        //Named killer: XliffReader.InlineContent.cs:103 (ParseOriginalData) - dropping the
+        //RefuseUnknownAttributes call on <data> would silently accept an unsupported attribute XLIFF
+        //2.1 §4.2.2.11 does not define.
+        XliffFormatException exception = ReadUnitExpectingFailure(
+            """<originalData><data id="d1" bogus="x">a</data></originalData><segment><source>x</source></segment>""");
+
+        Assert.Contains("carries the unsupported attribute 'bogus'", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void RejectsAForeignNamespaceElementNamedCpInsideData()
+    {
+        //Named killer: XliffReader.InlineContent.cs:143 (ReadDataText) - changing
+        //IsCodePoint(...) && IsCore(...) to || would let a foreign-namespace element merely named 'cp'
+        //match the core <cp> branch instead of falling through to the 'not <cp>' refusal.
+        XliffFormatException exception = ReadUnitExpectingFailure(
+            """<originalData xmlns:ext="urn:example:ext"><data id="d1">a<ext:cp hex="0041"/>b</data></originalData><segment><source>x</source></segment>""");
+
+        Assert.Contains("appears inside <data> in unit 'u'", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void AnInlineIdMayReuseAnIdOnACoreElementThatIsNeitherASegmentNorAnIgnorable()
+    {
+        //Named killer: XliffReader.InlineContent.cs:173 (CollectSegmentScopeIds) - changing
+        //!core || !segmentOrIgnorable to !core && !segmentOrIgnorable would stop skipping a core
+        //element that is not a <segment>/<ignorable> (here <originalData>'s own id attribute), wrongly
+        //seeding it into the unit's shared inline-id scope and refusing the <ph> that reuses it. Also
+        //kills the mutant at line 175 (`continue;` removed): the same scenario reaches the same
+        //continue; removing it would fall through and add the id regardless of the if-condition.
+        XliffUnit unit = ReadUnit("""<originalData id="od1"/><segment><source><ph id="od1"/></source></segment>""");
+
+        Assert.AreEqual("od1", ((PlaceholderPart)unit.Segments[0].SourceContent.Parts[0]).Id);
+    }
+
+    [TestMethod]
+    public void RejectsACodePointWithAnUnsupportedAttributeInsideContent()
+    {
+        //Named killer: XliffReader.InlineContent.cs:275 (AppendCodePoint) - dropping the
+        //RefuseUnknownAttributes call would silently accept a <cp> inside inline content carrying an
+        //attribute XLIFF 2.1 §4.2.3.1 does not define; the existing 'inside data' test hits a different
+        //call site (line 145).
+        XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><cp hex="41" bogus="x"/></source></segment>""");
+
+        Assert.Contains("carries the unsupported attribute 'bogus'", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void RejectsAPairedCodeWithAnUnsupportedAttribute()
+    {
+        //Named killer: XliffReader.InlineContent.cs:379 (AppendPairedCode) - dropping the
+        //RefuseUnknownAttributes call would silently accept a <pc> carrying an attribute XLIFF 2.1
+        //§4.3.1 does not define for it.
+        XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><pc id="1" bogus="x">a</pc></source></segment>""");
+
+        Assert.Contains("carries the unsupported attribute 'bogus'", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void PairedCodeDefaultsCanCopyAndCanDeleteToTrue()
+    {
+        //Named killer: XliffReader.InlineContent.cs:385-386 (AppendPairedCode) - changing either
+        //canCopy's or canDelete's default argument from true to false would make a <pc> with neither
+        //attribute silently read as non-copyable or non-deletable instead of XLIFF 2.1's yes default.
+        XliffUnit unit = ReadUnit("""<segment><source><pc id="1">x</pc></source></segment>""");
+
+        var start = (StartCodePart)unit.Segments[0].SourceContent.Parts[0];
+        var end = (EndCodePart)unit.Segments[0].SourceContent.Parts[2];
+        Assert.IsTrue(start.CanCopy);
+        Assert.IsTrue(start.CanDelete);
+        Assert.IsTrue(end.CanCopy);
+        Assert.IsTrue(end.CanDelete);
+    }
+
+    [TestMethod]
+    public void PairedCodeDefaultsEquivStartAndEquivEndToEmpty()
+    {
+        //Named killer: XliffReader.InlineContent.cs:398/419 (AppendPairedCode) - changing either the
+        //equivStart or the equivEnd null-coalescing fallback from string.Empty to a non-empty sentinel
+        //would make a <pc> with neither attribute carry that sentinel as the corresponding half's Equiv.
+        XliffUnit unit = ReadUnit("""<segment><source><pc id="1">x</pc></source></segment>""");
+
+        var start = (StartCodePart)unit.Segments[0].SourceContent.Parts[0];
+        var end = (EndCodePart)unit.Segments[0].SourceContent.Parts[2];
+        Assert.AreEqual(string.Empty, start.Equiv);
+        Assert.AreEqual(string.Empty, end.Equiv);
+    }
+
+    [TestMethod]
+    public void RejectsAStartCodeWithAnUnsupportedAttribute()
+    {
+        //Named killer: XliffReader.InlineContent.cs:439 (AppendStartCode) - dropping the
+        //RefuseUnknownAttributes call would silently accept an <sc> carrying an attribute XLIFF 2.1
+        //§4.3.1 does not define for it.
+        XliffFormatException exception = ReadUnitExpectingFailure(
+            """<segment><source><sc id="1" bogus="x"/>x<ec startRef="1"/></source></segment>""");
+
+        Assert.Contains("carries the unsupported attribute 'bogus'", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void ReadsAStartCodesEquivAttribute()
+    {
+        //Named killer: XliffReader.InlineContent.cs:452 (AppendStartCode) - removing the left operand
+        //of the equiv null-coalescing expression would make Equiv always empty, ignoring an explicit
+        //equiv attribute on <sc>.
+        XliffUnit unit = ReadUnit("""<segment><source><sc id="1" equiv="[b]"/>x<ec startRef="1"/></source></segment>""");
+
+        Assert.AreEqual("[b]", ((StartCodePart)unit.Segments[0].SourceContent.Parts[0]).Equiv);
+    }
+
+    [TestMethod]
+    public void RejectsAMarkerWithAnUnsupportedAttribute()
+    {
+        //Named killer: XliffReader.InlineContent.cs:555 (AppendMarker) - dropping the
+        //RefuseUnknownAttributes call would silently accept a <mrk> carrying an attribute XLIFF 2.1
+        //§4.3.1 does not define for it.
+        XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><mrk id="m1" bogus="x">a</mrk></source></segment>""");
+
+        Assert.Contains("carries the unsupported attribute 'bogus'", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void RejectsAStartMarkerWithAnUnsupportedAttribute()
+    {
+        //Named killer: XliffReader.InlineContent.cs:571 (AppendStartMarker) - dropping the
+        //RefuseUnknownAttributes call would silently accept an <sm> carrying an attribute XLIFF 2.1
+        //§4.3.1 does not define for it.
+        XliffFormatException exception = ReadUnitExpectingFailure(
+            """<segment><source><sm id="m1" bogus="x"/>a<em startRef="m1"/></source></segment>""");
+
+        Assert.Contains("carries the unsupported attribute 'bogus'", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void RejectsAnEndMarkerWithAnUnsupportedAttribute()
+    {
+        //Named killer: XliffReader.InlineContent.cs:585 (AppendEndMarker) - dropping the
+        //RefuseUnknownAttributes call would silently accept an <em> carrying an attribute XLIFF 2.1
+        //§4.3.1 does not define for it.
+        XliffFormatException exception = ReadUnitExpectingFailure(
+            """<segment><source><sm id="m1"/>a<em startRef="m1" bogus="x"/></source></segment>""");
+
+        Assert.Contains("carries the unsupported attribute 'bogus'", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void RejectsTheReservedItalicSubTypeWithTheWrongType()
+    {
+        //Named killer: XliffReader.InlineContent.cs:792 (ParseSubType) - changing either
+        //IsSubTypeItalic(subType) || IsSubTypeUnderline(subType) or
+        //IsSubTypeBold(subType) || IsSubTypeItalic(subType) to && makes the AND term always false for
+        //subType "xlf:i" (Bold, Italic and Underline test mutually exclusive literals on the same
+        //string), so xlf:i alone would stop counting as a reserved fmt sub-type and be silently
+        //accepted under type="ui" instead of refused.
+        XliffFormatException exception = ReadUnitExpectingFailure("""<segment><source><ph id="1" type="ui" subType="xlf:i"/></source></segment>""");
+
+        Assert.Contains("requires type=\"fmt\"", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void ReadsAMarkerAnnotationWithTranslateTrue()
+    {
+        //Named killer: XliffReader.InlineContent.cs:825 (ParseNullableYesNo) - changing the IsYes
+        //branch's true to false would make an explicit translate="yes" read back identically to
+        //translate="no".
+        XliffUnit unit = ReadUnit("""<segment><source><mrk id="m1" translate="yes">Hi</mrk></source></segment>""");
+
+        var start = (AnnotationStartPart)unit.Segments[0].SourceContent.Parts[0];
+        Assert.AreEqual(true, start.Translate);
+    }
 }
