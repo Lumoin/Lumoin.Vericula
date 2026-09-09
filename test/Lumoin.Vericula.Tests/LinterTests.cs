@@ -423,7 +423,7 @@ public sealed class LinterTests
     [TestMethod]
     public void GlossaryCheckSearchesTheUnitsPlainRenderedSourceNotItsMarkup()
     {
-        //Linter.cs, LintUnit: unit.RenderSource(InlineRendering.Plain) => unit.Source (the Markup
+        //Linter.cs:226, LintUnit: unit.RenderSource(InlineRendering.Plain) => unit.Source (the Markup
         //shorthand) — a glossary term hidden behind a resolved code's synthesized/original-data
         //rendering ("Open your <icon/>" under Markup) is invisible to ContainsTerm, so the mutant
         //finds no term use and reports nothing; the source's Plain rendering ("Open your wallet")

@@ -126,7 +126,7 @@ public sealed class XliffUnitTests
     public void ATranslateNoSpanOpenedInOneSegmentAndClosedInALaterSegmentExemptsTheSegmentBetween()
     {
         //5.1/5.2: the completeness rule must carry its translate stack across the unit's segments in
-        //document order on the source side (XliffUnit.cs, RenderTarget), not evaluate each segment's
+        //document order on the source side (XliffUnit.cs:87, RenderTarget), not evaluate each segment's
         //translatable text from an empty stack the way InlineContent.TranslatableText does in
         //isolation. Segment 2's own content ("Middle") looks translatable when walked on its own, so
         //this test fails against the isolated-stack mutant (segment.SourceContent.TranslatableText)
@@ -141,6 +141,21 @@ public sealed class XliffUnitTests
             new XliffSegment("seg3", SegmentKind.Translatable, InlineContent.Create([closeSplit]), null, SegmentState.Initial, null));
 
         Assert.AreEqual("Alku Middle", unit.RenderTarget(InlineRendering.Markup));
+    }
+
+    [TestMethod]
+    public void AnEmptyTargetContentDoesNotCountAsATargetForCompleteness()
+    {
+        //5.1: target content that exists but is empty (InlineContent.Empty, no parts) does not count
+        //as a target (XliffUnit.cs:139, IsComplete). FromText("A", "Home", "") builds a segment whose
+        //TargetContent is InlineContent.Empty rather than null, so the mutant
+        //(segment.TargetContent is not null, treating any non-null content as a target) sees the empty
+        //target as present and completes the unit; the correct code still requires non-empty target
+        //content, or a source with no translatable text, so this unit stays incomplete and
+        //RenderTarget returns null.
+        XliffUnit unit = XliffUnit.FromText("A", "Home", string.Empty);
+
+        Assert.IsNull(unit.RenderTarget(InlineRendering.Markup));
     }
 
     [TestMethod]

@@ -6,7 +6,7 @@ namespace Lumoin.Vericula.Cooking;
 /// <summary>
 /// Options that shape a <see cref="ResxCooker"/> run.
 /// </summary>
-[DebuggerDisplay("ResxCookOptions: {BaseName}")]
+[DebuggerDisplay("ResxCookOptions: {BaseName}, rendering: {Rendering}")]
 public sealed record ResxCookOptions
 {
     /// <summary>

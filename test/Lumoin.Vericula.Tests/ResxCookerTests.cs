@@ -491,6 +491,7 @@ public sealed class ResxCookerTests
 
         ArgumentException exception = Assert.ThrowsExactly<ArgumentException>(() => Cook(xliff));
         Assert.Contains("Ctrl", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("the neutral resource", exception.Message, StringComparison.Ordinal);
     }
 
     [TestMethod]

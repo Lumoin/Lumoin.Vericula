@@ -82,7 +82,7 @@ public static class ResxCooker
                 foreach(XliffUnit unit in EnumerateUnits(file))
                 {
                     string source = unit.RenderSource(rendering);
-                    RequireXmlSafeValue(source, unit.Id, culture: null);
+                    RequireXmlSafeValue(source, unit.Id, culture: null, paramName: nameof(documents));
 
                     if(contributors.TryGetValue(unit.Id, out (string FileId, string Source) contributor)
                         && !string.Equals(contributor.FileId, file.Id, StringComparison.Ordinal)
@@ -107,7 +107,7 @@ public static class ResxCooker
                     //untranslated.
                     if(culture is not null && unit.RenderTarget(rendering) is { } target)
                     {
-                        RequireXmlSafeValue(target, unit.Id, culture);
+                        RequireXmlSafeValue(target, unit.Id, culture, nameof(documents));
 
                         (string Culture, string UnitId) targetKey = (culture, unit.Id);
                         if(targetContributors.TryGetValue(targetKey, out (string FileId, string Target) targetContributor)
@@ -233,8 +233,9 @@ public static class ResxCooker
     /// <param name="value">The cooked value to check.</param>
     /// <param name="unitId">The id of the unit the value was cooked from, named in the exception.</param>
     /// <param name="culture">The culture the value was cooked for, or null for the neutral resource; named in the exception.</param>
+    /// <param name="paramName">The public parameter name to blame the refusal on, matching <see cref="Cook"/>'s sibling refusals.</param>
     /// <exception cref="ArgumentException">If <paramref name="value"/> contains a character XML cannot carry.</exception>
-    private static void RequireXmlSafeValue(string value, string unitId, string? culture)
+    private static void RequireXmlSafeValue(string value, string unitId, string? culture, string paramName)
     {
         if(IsXmlSafeText(value))
         {
@@ -243,7 +244,9 @@ public static class ResxCooker
 
         string where = culture is null ? "the neutral resource" : $"culture '{culture}'";
 
-        throw new ArgumentException($"Unit '{unitId}' has a cooked value for {where} that contains a character XML cannot carry.");
+        throw new ArgumentException(
+            $"Unit '{unitId}' has a cooked value for {where} that contains a character XML cannot carry.",
+            paramName);
     }
 
     /// <summary>

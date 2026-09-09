@@ -197,14 +197,14 @@ public static class Linter
 
         foreach(XliffSegment segment in unit.Segments)
         {
-            foreach(LintDiagnostic diagnostic in LintUnresolvableCodes(file, unit, segment.Id, segment.SourceContent))
+            foreach(LintDiagnostic diagnostic in LintUnresolvableCodes(file, unit, segment.Id, segment.SourceContent, "source"))
             {
                 yield return diagnostic;
             }
 
             if(segment.TargetContent is { } targetContent)
             {
-                foreach(LintDiagnostic diagnostic in LintUnresolvableCodes(file, unit, segment.Id, targetContent))
+                foreach(LintDiagnostic diagnostic in LintUnresolvableCodes(file, unit, segment.Id, targetContent, "target"))
                 {
                     yield return diagnostic;
                 }
@@ -337,17 +337,18 @@ public static class Linter
     /// <param name="unit">The unit the content belongs to.</param>
     /// <param name="segmentId">The id of the segment <paramref name="content"/> belongs to, or null when the segment has none.</param>
     /// <param name="content">The source or target content to check.</param>
+    /// <param name="side">Which side <paramref name="content"/> is, "source" or "target", named in the diagnostic so a warning on one side is not confused with the same code id on the other.</param>
     /// <returns>A VFX110 diagnostic for each unresolvable code part found, in document order.</returns>
-    private static IEnumerable<LintDiagnostic> LintUnresolvableCodes(XliffFile file, XliffUnit unit, string? segmentId, InlineContent content)
+    private static IEnumerable<LintDiagnostic> LintUnresolvableCodes(XliffFile file, XliffUnit unit, string? segmentId, InlineContent content, string side)
     {
         foreach(InlinePart part in content.Parts)
         {
-            (string? codeId, InlineCodeType type, string? subType, OriginalData? originalData, string? disp) = part switch
+            (string? codeId, InlineCodeType type, string? subType, OriginalData? originalData, string? disp, bool closingHalf) = part switch
             {
-                PlaceholderPart placeholder => (placeholder.Id, placeholder.Type, placeholder.SubType, placeholder.OriginalData, placeholder.Disp),
-                StartCodePart start => (start.Id, start.Type, start.SubType, start.OriginalData, start.Disp),
-                EndCodePart end => (end.Isolated ? end.Id : end.StartRef, end.Type, end.SubType, end.OriginalData, end.Disp),
-                _ => (null, InlineCodeType.None, null, null, null)
+                PlaceholderPart placeholder => (placeholder.Id, placeholder.Type, placeholder.SubType, placeholder.OriginalData, placeholder.Disp, false),
+                StartCodePart start => (start.Id, start.Type, start.SubType, start.OriginalData, start.Disp, false),
+                EndCodePart end => (end.Isolated ? end.Id : end.StartRef, end.Type, end.SubType, end.OriginalData, end.Disp, !end.Isolated),
+                _ => (null, InlineCodeType.None, null, null, null, false)
             };
 
             if(codeId is null || originalData is not null || disp is not null || WellKnownInlineTokens.TryResolve(type, subType, originalData, out _))
@@ -355,10 +356,11 @@ public static class Linter
                 continue;
             }
 
+            string role = closingHalf ? $"{side}, closing half" : side;
             yield return new LintDiagnostic(
                 WellKnownDiagnostics.UnresolvableCode,
                 LintSeverity.Warning,
-                $"Code '{codeId}' in {SegmentLabel(unit, segmentId)} has no original data, no display text and resolves to no known element, so it renders as its equiv text only.",
+                $"Code '{codeId}' in {SegmentLabel(unit, segmentId)} ({role}) has no original data, no display text and resolves to no known element, so it renders as its equiv text only.",
                 Locate(file, unit),
                 segmentId);
         }

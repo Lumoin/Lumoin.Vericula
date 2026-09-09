@@ -167,4 +167,9 @@ public static class WellKnownDiagnostics
     /// <param name="id">The diagnostic id to test.</param>
     /// <returns><see langword="true"/> if the id is the regex-timed-out id; otherwise, <see langword="false"/>.</returns>
     public static bool IsRegexTimedOut(string id) => string.Equals(id, RegexTimedOut, StringComparison.Ordinal);
+
+    /// <summary>Determines if a diagnostic id is <see cref="UnresolvableCode"/>.</summary>
+    /// <param name="id">The diagnostic id to test.</param>
+    /// <returns><see langword="true"/> if the id is the unresolvable-code id; otherwise, <see langword="false"/>.</returns>
+    public static bool IsUnresolvableCode(string id) => string.Equals(id, UnresolvableCode, StringComparison.Ordinal);
 }

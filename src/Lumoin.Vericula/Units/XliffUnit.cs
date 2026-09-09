@@ -136,6 +136,6 @@ public sealed record XliffUnit(
     private static bool IsComplete(XliffSegment segment, string translatableText)
     {
         return segment.State is not SegmentState.NeedsTranslation
-            && (segment.TargetContent is not null || translatableText.Length == 0);
+            && (segment.TargetContent is { IsEmpty: false } || translatableText.Length == 0);
     }
 }
