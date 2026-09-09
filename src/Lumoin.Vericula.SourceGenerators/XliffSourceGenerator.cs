@@ -20,7 +20,7 @@ namespace Lumoin.Vericula.SourceGenerators;
 /// stage exchanges value-equatable records so the incremental cache stays hot across keystrokes.
 /// </summary>
 [Generator(LanguageNames.CSharp)]
-public sealed class XliffSourceGenerator: IIncrementalGenerator
+public sealed partial class XliffSourceGenerator: IIncrementalGenerator
 {
     /// <summary>The name stamped into the generated class's <c>GeneratedCodeAttribute</c>.</summary>
     private const string GeneratorName = "Lumoin.Vericula.SourceGenerators";
@@ -157,10 +157,19 @@ public sealed class XliffSourceGenerator: IIncrementalGenerator
                     return Failed(source.Path, "A <unit> element does not declare an id.", unit);
                 }
 
+                if(!TryParseOriginalData(unit, id!, out ImmutableDictionary<string, string> data, out string? originalDataFailure))
+                {
+                    return Failed(source.Path, originalDataFailure!, unit);
+                }
+
                 var sourceBuilder = new StringBuilder();
+                var sourcePlainBuilder = new StringBuilder();
                 var targetBuilder = new StringBuilder();
                 bool sawSegment = false;
                 bool translationComplete = true;
+                InlineSideState sourceState = InlineSideState.Empty;
+                InlineSideState targetState = InlineSideState.Empty;
+                ImmutableStack<bool> translateStack = ImmutableStack<bool>.Empty;
                 foreach(XElement child in unit.Elements())
                 {
                     if(!WellKnownXliffNamespaces.IsCore(child.Name.NamespaceName))
@@ -175,12 +184,14 @@ public sealed class XliffSourceGenerator: IIncrementalGenerator
                         continue;
                     }
 
-                    if(!TryReadContent(child.Element(core + WellKnownXliffElements.Source), id!, out string sourceText, out string? failure))
+                    if(!TryRenderContent(child.Element(core + WellKnownXliffElements.Source), id!, data, sourceState, out ImmutableArray<RenderPart> sourceParts, out sourceState, out string? failure))
                     {
                         return Failed(source.Path, failure!, unit);
                     }
 
-                    sourceBuilder.Append(sourceText);
+                    string sourceMarkup = RenderMarkup(sourceParts);
+                    sourceBuilder.Append(sourceMarkup);
+                    sourcePlainBuilder.Append(RenderPlain(sourceParts));
 
                     XElement? targetElement = child.Element(core + WellKnownXliffElements.Target);
                     if(targetElement is not null)
@@ -188,32 +199,50 @@ public sealed class XliffSourceGenerator: IIncrementalGenerator
                         anyTargetSeen = true;
                     }
 
-                    if(!TryReadContent(targetElement, id!, out string targetText, out failure))
+                    if(!TryRenderContent(targetElement, id!, data, targetState, out ImmutableArray<RenderPart> targetParts, out targetState, out failure))
                     {
                         return Failed(source.Path, failure!, unit);
                     }
 
+                    string targetMarkup = RenderMarkup(targetParts);
+
+                    //Walked for every segment and ignorable, translatable or not, so the stack stays
+                    //correctly threaded across the whole unit (5.1); only a translatable segment's own
+                    //text feeds the completeness check below.
+                    (string translatableSourceText, translateStack) = WalkTranslatable(sourceParts, translateStack);
+
                     if(isSegment)
                     {
                         sawSegment = true;
-                        bool nonEmptyTarget = targetElement is not null && targetText.Length > 0;
                         bool needsTranslation = WellKnownXliffAttributeValues.IsStateInitial(child.Attribute(WellKnownXliffAttributes.State)?.Value)
                             && WellKnownVericulaMetadata.IsNeedsTranslationSubState(child.Attribute(WellKnownXliffAttributes.SubState)?.Value);
-                        if(!nonEmptyTarget || needsTranslation)
+                        bool hasTargetContent = targetElement is not null && targetParts.Length != 0;
+                        if(needsTranslation || !(hasTargetContent || translatableSourceText.Length == 0))
                         {
                             translationComplete = false;
                         }
+                    }
 
-                        targetBuilder.Append(targetText);
-                    }
-                    else
-                    {
-                        targetBuilder.Append(targetElement is null ? sourceText : targetText);
-                    }
+                    //Every segment and ignorable alike folds its own target when it has one (an
+                    //element present, however it renders) and its own source otherwise, matching
+                    //XliffUnit.RenderTarget's fold (5.1); a segment can reach this fallback branch too
+                    //now, whenever the completeness exemption above lets a target-less segment count
+                    //as complete.
+                    targetBuilder.Append(targetElement is null ? sourceMarkup : targetMarkup);
+                }
+
+                if(!TryRequireStartCodesClosedOrIsolated(sourceState, id!, "source", out string? sourceOpenFailure))
+                {
+                    return Failed(source.Path, sourceOpenFailure!, unit);
+                }
+
+                if(!TryRequireStartCodesClosedOrIsolated(targetState, id!, "target", out string? targetOpenFailure))
+                {
+                    return Failed(source.Path, targetOpenFailure!, unit);
                 }
 
                 bool isTranslated = sawSegment && translationComplete;
-                units.Add(new UnitModel(id!, sourceBuilder.ToString(), isTranslated ? targetBuilder.ToString() : null));
+                units.Add(new UnitModel(id!, sourceBuilder.ToString(), sourcePlainBuilder.ToString(), isTranslated ? targetBuilder.ToString() : null));
             }
 
             if(targetLanguage is null && anyTargetSeen)
@@ -247,47 +276,6 @@ public sealed class XliffSourceGenerator: IIncrementalGenerator
         {
             return Failed(source.Path, exception.Message, locatedAt: null);
         }
-    }
-
-    /// <summary>
-    /// Folds a <c>&lt;source&gt;</c> or <c>&lt;target&gt;</c> element's text content, refusing when it
-    /// contains inline markup <see cref="WellKnownXliffElements.IsUnsupportedInlineMarkup"/> flags: such
-    /// markup carries data (an id, a data reference, a literal code point) that
-    /// <see cref="XElement.Value"/> would silently discard, and the generator would rather fail the
-    /// document than emit an accessor with lossy text.
-    /// </summary>
-    /// <param name="element">The <c>&lt;source&gt;</c> or <c>&lt;target&gt;</c> element to read, or <see langword="null"/> when absent.</param>
-    /// <param name="unitId">The enclosing unit's id, used in the failure message.</param>
-    /// <param name="text">The folded text, or empty when <paramref name="element"/> is <see langword="null"/> or reading failed.</param>
-    /// <param name="failure">The failure message naming the unsupported markup, or <see langword="null"/> on success.</param>
-    /// <returns><see langword="true"/> if the content was read without loss; otherwise, <see langword="false"/>.</returns>
-    private static bool TryReadContent(XElement? element, string unitId, out string text, out string? failure)
-    {
-        if(element is null)
-        {
-            text = string.Empty;
-            failure = null;
-
-            return true;
-        }
-
-        foreach(XElement descendant in element.DescendantsAndSelf())
-        {
-            if(descendant != element
-                && WellKnownXliffNamespaces.IsCore(descendant.Name.NamespaceName)
-                && WellKnownXliffElements.IsUnsupportedInlineMarkup(descendant.Name.LocalName))
-            {
-                text = string.Empty;
-                failure = $"Inline markup <{descendant.Name.LocalName}> in unit '{unitId}' is not supported by the generator; the document was not turned into accessors.";
-
-                return false;
-            }
-        }
-
-        text = element.Value;
-        failure = null;
-
-        return true;
     }
 
     /// <summary>
@@ -404,10 +392,15 @@ public sealed class XliffSourceGenerator: IIncrementalGenerator
                     accessorNames.Add(unit.Id, accessorName);
                 }
 
-                AddText(context, sourceTable, unit.Id, unit.SourceText, document.Path);
+                AddText(context, sourceTable, unit.Id, unit.SourceText, unit.SourcePlainText, document.Path);
                 if(targetTable is not null && unit.TargetText is not null)
                 {
-                    AddText(context, targetTable, unit.Id, unit.TargetText, document.Path);
+                    //The empty plain text is never read: the doc-comment loop in BuildAccessorSource
+                    //only ever consults languages[sourceField].Entries, and that table is populated
+                    //exclusively through the sourceTable branch above, because every accepted document
+                    //shares the one accepted srcLang (the acceptance filter above), so no accepted
+                    //document's own trgLang can equal it too.
+                    AddText(context, targetTable, unit.Id, unit.TargetText, string.Empty, document.Path);
                 }
             }
         }
@@ -508,14 +501,19 @@ public sealed class XliffSourceGenerator: IIncrementalGenerator
         builder.AppendLine("    }");
 
         //One accessor per unit in the source language, so missing translations
-        //still resolve and missing sources are caught at compile time at call sites.
-        foreach(KeyValuePair<string, string> entry in languages[NormalizeLanguageTagFromField(sourceField, languages)].Entries)
+        //still resolve and missing sources are caught at compile time at call sites. The doc summary
+        //shows the Plain rendering (text and equiv only) rather than entry.Value's Markup rendering,
+        //so IntelliSense reads as text instead of escaped HTML fragments (5.7); the accessor's own
+        //value stays the Markup rendering.
+        LanguageTable sourceLanguageTable = languages[NormalizeLanguageTagFromField(sourceField, languages)];
+        foreach(KeyValuePair<string, string> entry in sourceLanguageTable.Entries)
         {
             string accessorName = accessorNames[entry.Key];
             string keyLiteral = SymbolDisplay.FormatLiteral(entry.Key, quote: true);
+            string plainText = sourceLanguageTable.PlainEntries[entry.Key];
             builder.AppendLine();
             builder.AppendLine("    /// <summary>");
-            builder.AppendLine($"    /// Gets the translation of \"{EscapeXmlDocumentation(entry.Value)}\".");
+            builder.AppendLine($"    /// Gets the translation of \"{EscapeXmlDocumentation(plainText)}\".");
             builder.AppendLine("    /// </summary>");
             builder.AppendLine($"    public static string {accessorName} => Resolve({keyLiteral});");
         }
@@ -620,9 +618,10 @@ public sealed class XliffSourceGenerator: IIncrementalGenerator
     /// <param name="context">The source production context conflict diagnostics are reported to.</param>
     /// <param name="table">The language table to add the entry to.</param>
     /// <param name="id">The unit id.</param>
-    /// <param name="text">The folded text for this language.</param>
+    /// <param name="text">The folded <c>Markup</c> text for this language, the accessor's value.</param>
+    /// <param name="plainText">The folded <c>Plain</c> text, for the accessor's XML-doc summary when this table turns out to be the source-language table; ignored otherwise, so a target-side call may pass an inert placeholder.</param>
     /// <param name="documentPath">The path of the document this occurrence came from.</param>
-    private static void AddText(SourceProductionContext context, LanguageTable table, string id, string text, string documentPath)
+    private static void AddText(SourceProductionContext context, LanguageTable table, string id, string text, string plainText, string documentPath)
     {
         if(table.Entries.TryGetValue(id, out string? existingText))
         {
@@ -641,6 +640,7 @@ public sealed class XliffSourceGenerator: IIncrementalGenerator
         }
 
         table.Entries[id] = text;
+        table.PlainEntries[id] = plainText;
         table.SourcePaths[id] = documentPath;
     }
 
@@ -947,8 +947,11 @@ public sealed class XliffSourceGenerator: IIncrementalGenerator
         /// <summary>The generated field name this table's dictionary is emitted as.</summary>
         public string FieldName { get; } = fieldName;
 
-        /// <summary>The unit id to folded text entries this table carries, ordered for deterministic emission.</summary>
+        /// <summary>The unit id to folded <c>Markup</c> text entries this table carries, ordered for deterministic emission.</summary>
         public SortedDictionary<string, string> Entries { get; } = new(StringComparer.Ordinal);
+
+        /// <summary>The unit id to folded <c>Plain</c> text entries, read only when this table is the accepted source-language table (5.7).</summary>
+        public Dictionary<string, string> PlainEntries { get; } = new(StringComparer.Ordinal);
 
         /// <summary>The path of the document each entry first came from, so a later conflict can name both files.</summary>
         public Dictionary<string, string> SourcePaths { get; } = new(StringComparer.Ordinal);

@@ -642,11 +642,11 @@ public sealed class XliffSourceGeneratorTests
     }
 
     [TestMethod]
-    public void AStandalonePlaceholderInSourceIsRefusedInsteadOfFlattened()
+    public void AStandalonePlaceholderInSourceRendersItsDispInTheAccessorValue()
     {
-        //r1-50: XElement.Value on a <source> containing <ph id="1"/> used to silently drop
-        //the placeholder and emit "Hello !"; the fix refuses the whole document instead of
-        //emitting text with the code silently missing.
+        //Step 5 (5.7): a <ph> used to make the generator refuse the whole document (r1-50); the
+        //generator now renders it the same way InlineContent.Render(Markup) would: no dataRef, so the
+        //preference order falls past original data straight to disp, rendered verbatim.
         var result = RunGenerator("""
             <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
               <file id="wallet">
@@ -659,18 +659,17 @@ public sealed class XliffSourceGeneratorTests
             </xliff>
             """, "Bootstrap", TestContext.CancellationToken);
 
-        Assert.HasCount(1, result.Diagnostics);
-        Assert.AreEqual(WellKnownGeneratorDiagnostics.ParseFailure, result.Diagnostics[0].Id);
-        Assert.Contains("Inline markup <ph> in unit 'Greeting' is not supported", result.Diagnostics[0].GetMessage(CultureInfo.InvariantCulture), StringComparison.Ordinal);
-        Assert.HasCount(0, result.Results[0].GeneratedSources);
+        Assert.HasCount(0, result.Diagnostics);
+        string code = result.Results[0].GeneratedSources[0].SourceText.ToString();
+        Assert.Contains("\"Hello {0}!\"", code, StringComparison.Ordinal);
     }
 
     [TestMethod]
-    public void AMarkerAnnotationInSourceIsRefusedInsteadOfFlattened()
+    public void AMarkerAnnotationInSourceRendersOnlyItsChildren()
     {
-        //r1-50: <mrk translate="no"> wraps text, so XElement.Value alone does not notice
-        //anything is wrong; without checking descendants for Marker too, "Keep ACME as
-        //is" would be emitted with the translate="no" protection silently gone.
+        //Step 5 (5.7): a <mrk> used to make the generator refuse the whole document (r1-50); the
+        //generator now renders it the same way InlineContent.Render(Markup) would: the annotation
+        //itself contributes nothing, so translate="no" carries no visible marker in the rendered text.
         var result = RunGenerator("""
             <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
               <file id="wallet">
@@ -683,9 +682,944 @@ public sealed class XliffSourceGeneratorTests
             </xliff>
             """, "Bootstrap", TestContext.CancellationToken);
 
+        Assert.HasCount(0, result.Diagnostics);
+        string code = result.Results[0].GeneratedSources[0].SourceText.ToString();
+        Assert.Contains("\"Keep ACME as is\"", code, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void PreferenceOrderPicksOriginalDataOverASynthesizedTagDispAndEquiv()
+    {
+        //Twin: test/Lumoin.Vericula.Tests/GeneratorRendererTwinTests.cs PreferenceOrderPicksOriginalDataOverASynthesizedTagDispAndEquiv
+        //5.2/5.7: a code's Markup rendering prefers, in order, its original data, a synthesized tag,
+        //its disp, then its escaped equiv. Original data wins outright here even though the code also
+        //carries a resolvable type (link), a disp and an equiv of its own.
+        (Type translationsType, AssemblyLoadContext context) = EmitAndLoad("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="Icon">
+                  <originalData>
+                    <data id="d1">&lt;b&gt;</data>
+                  </originalData>
+                  <segment>
+                    <source>Hello <ph id="1" type="link" dataRef="d1" disp="LinkText" equiv="[link]"/> world</source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "PreferenceOriginalData", TestContext.CancellationToken);
+        try
+        {
+            Assert.AreEqual("Hello <b> world", GetAccessor(translationsType, "Icon"));
+        }
+        finally
+        {
+            context.Unload();
+        }
+    }
+
+    [TestMethod]
+    public void PreferenceOrderFallsToASynthesizedTagWhenThereIsNoOriginalData()
+    {
+        //5.2/5.7: with no dataRef, the type-alone clue resolves "link" to the HTML <a> element.
+        (Type translationsType, AssemblyLoadContext context) = EmitAndLoad("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="Link">
+                  <segment>
+                    <source>Click <ph id="1" type="link" disp="LinkText" equiv="[link]"/> here</source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "PreferenceTag", TestContext.CancellationToken);
+        try
+        {
+            Assert.AreEqual("Click <a/> here", GetAccessor(translationsType, "Link"));
+        }
+        finally
+        {
+            context.Unload();
+        }
+    }
+
+    [TestMethod]
+    public void PreferenceOrderFallsToDispWhenNoOriginalDataOrTagResolves()
+    {
+        //5.2/5.7: type="other" resolves no tag and there is no dataRef, so disp is used verbatim.
+        (Type translationsType, AssemblyLoadContext context) = EmitAndLoad("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="Icon2">
+                  <segment>
+                    <source>See <ph id="1" type="other" disp="[icon]" equiv="ICON"/> now</source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "PreferenceDisp", TestContext.CancellationToken);
+        try
+        {
+            Assert.AreEqual("See [icon] now", GetAccessor(translationsType, "Icon2"));
+        }
+        finally
+        {
+            context.Unload();
+        }
+    }
+
+    [TestMethod]
+    public void PreferenceOrderFallsToTheEscapedEquivAsALastResort()
+    {
+        //5.2/5.7: with no originalData, no synthesized tag and no disp, equiv is the only rendering
+        //left, and it is escaped like text (unlike disp and originalData, which render verbatim).
+        (Type translationsType, AssemblyLoadContext context) = EmitAndLoad("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="EquivOnly">
+                  <segment>
+                    <source>Value <ph id="1" equiv="A &amp; B"/> shown</source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "PreferenceEquiv", TestContext.CancellationToken);
+        try
+        {
+            Assert.AreEqual("Value A &amp; B shown", GetAccessor(translationsType, "EquivOnly"));
+        }
+        finally
+        {
+            context.Unload();
+        }
+    }
+
+    [TestMethod]
+    public void TextRendersVerbatimWhenTheContentHasNoCodes()
+    {
+        //Twin: test/Lumoin.Vericula.Tests/GeneratorRendererTwinTests.cs TextRendersVerbatimWhenTheContentHasNoCodes
+        //5.2: with no code parts, & and < are never escaped, even though they would need to be if this
+        //content had a code (5.7's escaping decision is per content, not per character).
+        (Type translationsType, AssemblyLoadContext context) = EmitAndLoad("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="PlainAngles">
+                  <segment>
+                    <source>A &amp; B &lt; C</source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "NoCodesVerbatim", TestContext.CancellationToken);
+        try
+        {
+            Assert.AreEqual("A & B < C", GetAccessor(translationsType, "PlainAngles"));
+        }
+        finally
+        {
+            context.Unload();
+        }
+    }
+
+    [TestMethod]
+    public void TextEscapesWhenTheContentHasAtLeastOneCode()
+    {
+        //Twin: test/Lumoin.Vericula.Tests/GeneratorRendererTwinTests.cs TextEscapesWhenTheContentHasAtLeastOneCode
+        //5.2: the same "A & B < C" text now escapes, because a single <ph/> elsewhere in the same
+        //content makes the whole content an HTML fragment.
+        (Type translationsType, AssemblyLoadContext context) = EmitAndLoad("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="AnglesWithCode">
+                  <segment>
+                    <source>A &amp; B &lt; C <ph id="1" equiv="x"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "CodeEscapes", TestContext.CancellationToken);
+        try
+        {
+            Assert.AreEqual("A &amp; B &lt; C x", GetAccessor(translationsType, "AnglesWithCode"));
+        }
+        finally
+        {
+            context.Unload();
+        }
+    }
+
+    [TestMethod]
+    public void CodePointDecodesAHexValueOutsideTheXmlCharacterRange()
+    {
+        //5.3.1: <cp hex="A0"/> decodes to U+00A0 whatever its XML validity in this position.
+        (Type translationsType, AssemblyLoadContext context) = EmitAndLoad("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="Nbsp">
+                  <segment>
+                    <source>a<cp hex="A0"/>b</source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "CodePointBasic", TestContext.CancellationToken);
+        try
+        {
+            Assert.AreEqual("a b", GetAccessor(translationsType, "Nbsp"));
+        }
+        finally
+        {
+            context.Unload();
+        }
+    }
+
+    [TestMethod]
+    public void ACodePointAboveFfffBecomesASurrogatePairAndTwoHalvesMergeTheSameWay()
+    {
+        //Twin: test/Lumoin.Vericula.Tests/GeneratorRendererTwinTests.cs ACodePointAboveFfffBecomesASurrogatePairAndTwoHalvesMergeTheSameWay
+        //5.3.1: one <cp hex="01F600"/> (mixed-case hex accepted too, per EmojiTwoCp below; hex must be
+        //2, 4 or 6 digits, hence the leading zero) decodes to a surrogate pair; two <cp> elements each
+        //decoding to one half of the same pair merge into the identical character purely because their
+        //decoded halves land next to each other in the text.
+        (Type translationsType, AssemblyLoadContext context) = EmitAndLoad("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="EmojiOneCp">
+                  <segment>
+                    <source><cp hex="01F600"/></source>
+                  </segment>
+                </unit>
+                <unit id="EmojiTwoCp">
+                  <segment>
+                    <source><cp hex="d83d"/><cp hex="DE00"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "CodePointSurrogate", TestContext.CancellationToken);
+        try
+        {
+            string expected = char.ConvertFromUtf32(0x1F600);
+            Assert.AreEqual(expected, GetAccessor(translationsType, "EmojiOneCp"));
+            Assert.AreEqual(expected, GetAccessor(translationsType, "EmojiTwoCp"));
+        }
+        finally
+        {
+            context.Unload();
+        }
+    }
+
+    [TestMethod]
+    public void TwoCodesSharingADataRefRenderTheSameOriginalDataText()
+    {
+        //Twin: test/Lumoin.Vericula.Tests/GeneratorRendererTwinTests.cs TwoCodesSharingADataRefRenderTheSameOriginalDataText
+        //5.3: two codes referencing the same <data> id both resolve to its text; the unreferenced
+        //<data id="unused"> entry is silently dropped rather than refused, so the document still parses.
+        (Type translationsType, AssemblyLoadContext context) = EmitAndLoad("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="Shared">
+                  <originalData>
+                    <data id="d1">*</data>
+                    <data id="unused">ZZZ</data>
+                  </originalData>
+                  <segment>
+                    <source><ph id="p1" dataRef="d1"/> and <ph id="p2" dataRef="d1"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "SharedDataRef", TestContext.CancellationToken);
+        try
+        {
+            Assert.AreEqual("* and *", GetAccessor(translationsType, "Shared"));
+        }
+        finally
+        {
+            context.Unload();
+        }
+    }
+
+    [TestMethod]
+    public void NestedPairedCodesRenderTheirStartHalfChildrenThenEndHalf()
+    {
+        //Twin: test/Lumoin.Vericula.Tests/GeneratorRendererTwinTests.cs NestedPairedCodesRenderTheirStartHalfChildrenThenEndHalf
+        //5.3: a <pc> renders as its start half, its children, then its end half; nesting composes.
+        (Type translationsType, AssemblyLoadContext context) = EmitAndLoad("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="Nested">
+                  <segment>
+                    <source>A <pc id="1" type="fmt" subType="xlf:b">bold <pc id="2" type="fmt" subType="xlf:i">and italic</pc> text</pc> end</source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "NestedPc", TestContext.CancellationToken);
+        try
+        {
+            Assert.AreEqual("A <b>bold <i>and italic</i> text</b> end", GetAccessor(translationsType, "Nested"));
+        }
+        finally
+        {
+            context.Unload();
+        }
+    }
+
+    [TestMethod]
+    public void ASplitAnnotationRendersOnlyItsChildrenBetweenSmAndEm()
+    {
+        //5.3: mrk, sm and em render nothing themselves; only their children render.
+        (Type translationsType, AssemblyLoadContext context) = EmitAndLoad("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="Split">
+                  <segment>
+                    <source>Keep <sm id="s1" translate="no"/>ACME<em startRef="s1"/> as is</source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "SplitMarker", TestContext.CancellationToken);
+        try
+        {
+            Assert.AreEqual("Keep ACME as is", GetAccessor(translationsType, "Split"));
+        }
+        finally
+        {
+            context.Unload();
+        }
+    }
+
+    [TestMethod]
+    public void AWholeSegmentInsideAMrkTranslateNoIsCompleteWithNoTargetOfItsOwn()
+    {
+        //5.1: a translatable segment whose source is entirely inside translate="no" has empty
+        //translatable text, so it is complete without a target; its own source folds into the target
+        //table. Finding the key specifically inside LanguageFi's own literal (not merely LanguageEn's)
+        //proves the exemption reached completeness, not only rendering.
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en" trgLang="fi">
+              <file id="wallet">
+                <unit id="MrkWholeSegment">
+                  <segment>
+                    <source><mrk id="m1" translate="no">ACME</mrk></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        Assert.HasCount(0, result.Diagnostics);
+        Assert.Contains("[\"MrkWholeSegment\"] = \"ACME\"", LanguageTableText(result, "LanguageFi"), StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void AWholeSegmentInsideAnSmEmSpanIsCompleteWithNoTargetOfItsOwn()
+    {
+        //Same rule as the mrk case above, for the split sm/em form.
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en" trgLang="fi">
+              <file id="wallet">
+                <unit id="SmEmWholeSegment">
+                  <segment>
+                    <source><sm id="s1" translate="no"/>ACME<em startRef="s1"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        Assert.HasCount(0, result.Diagnostics);
+        Assert.Contains("[\"SmEmWholeSegment\"] = \"ACME\"", LanguageTableText(result, "LanguageFi"), StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void ATranslateNoSpanOpenedInOneSegmentAndClosedInALaterOneExemptsTheSegmentBetween()
+    {
+        //Twin: test/Lumoin.Vericula.Tests/GeneratorRendererTwinTests.cs ATranslateNoSpanOpenedInOneSegmentAndClosedInALaterOneExemptsTheSegmentBetween
+        //5.1: the translate stack is carried across the unit's segments in document order. If segment
+        //2's stack were reset instead of carried, "ACME" would count as untranslated text needing a
+        //target it never gets, the unit would be incomplete, and the Finnish accessor would fall back
+        //to the English source "Hello ACME world" instead of the folded Finnish text asserted below.
+        (Type translationsType, AssemblyLoadContext context) = EmitAndLoad("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en" trgLang="fi">
+              <file id="wallet">
+                <unit id="ThreeSegmentSpan">
+                  <segment>
+                    <source>Hello <sm id="s1" translate="no"/></source>
+                    <target>Hei </target>
+                  </segment>
+                  <segment>
+                    <source>ACME</source>
+                  </segment>
+                  <segment>
+                    <source><em startRef="s1"/> world</source>
+                    <target> maailma</target>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "CarriedStack", TestContext.CancellationToken);
+        CultureInfo originalCulture = CultureInfo.CurrentUICulture;
+        try
+        {
+            CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("fi");
+
+            Assert.AreEqual("Hei ACME maailma", GetAccessor(translationsType, "ThreeSegmentSpan"));
+        }
+        finally
+        {
+            CultureInfo.CurrentUICulture = originalCulture;
+            context.Unload();
+        }
+    }
+
+    [TestMethod]
+    public void ANeedsTranslationSegmentKeepsTheUnitOutOfTheTargetTableEvenWithATarget()
+    {
+        //5.1: a NeedsTranslation segment is never complete, target or no target, so the whole unit is
+        //excluded from the target-language table. This checks the table population directly, rather
+        //than only the Resolve fallback ASegmentNeedingTranslationFallsBackEvenWithATarget above checks.
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en" trgLang="fi">
+              <file id="wallet">
+                <unit id="DraftCopy">
+                  <segment state="initial" subState="vericula:needsTranslation">
+                    <source>Hello</source>
+                    <target>Hello (draft copy)</target>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        Assert.HasCount(0, result.Diagnostics);
+        Assert.DoesNotContain("DraftCopy", LanguageTableText(result, "LanguageFi"), StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void TheDocSummaryShowsThePlainRenderWhileTheAccessorValueStaysMarkup()
+    {
+        //5.7: the value stays the Markup rendering (the <pc> synthesized as an HTML tag pair), but the
+        //XML-doc summary above the accessor shows the Plain rendering (text and equiv only, so the pc
+        //contributes nothing beyond its wrapped text) so IntelliSense reads as text, not an HTML fragment.
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="Styled">
+                  <segment>
+                    <source>Hello <pc id="1" type="fmt" subType="xlf:b">bold</pc> world</source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        Assert.HasCount(0, result.Diagnostics);
+        string code = result.Results[0].GeneratedSources[0].SourceText.ToString();
+        Assert.Contains("\"Hello <b>bold</b> world\"", code, StringComparison.Ordinal);
+        Assert.Contains("Gets the translation of \"Hello bold world\".", code, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void AnIdReusedOnTheSameSideIsRefusedAsVfx300()
+    {
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="DupId">
+                  <segment>
+                    <source><ph id="1"/><ph id="1"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "The id '1' is used more than once in unit 'DupId'");
+    }
+
+    [TestMethod]
+    public void APlaceholderWithoutIdIsRefusedAsVfx300()
+    {
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="NoId">
+                  <segment>
+                    <source><ph/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "A <ph> element in unit 'NoId' does not declare the required id attribute.");
+    }
+
+    [TestMethod]
+    public void AStartCodeWithoutIdIsRefusedAsVfx300()
+    {
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="NoId">
+                  <segment>
+                    <source><sc/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "A <sc> element in unit 'NoId' does not declare the required id attribute.");
+    }
+
+    [TestMethod]
+    public void APairedCodeWithoutIdIsRefusedAsVfx300()
+    {
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="NoId">
+                  <segment>
+                    <source><pc>x</pc></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "A <pc> element in unit 'NoId' does not declare the required id attribute.");
+    }
+
+    [TestMethod]
+    public void AMarkerWithoutIdIsRefusedAsVfx300()
+    {
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="NoId">
+                  <segment>
+                    <source><mrk>x</mrk></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "A <mrk> element in unit 'NoId' does not declare the required id attribute.");
+    }
+
+    [TestMethod]
+    public void AStartMarkerWithoutIdIsRefusedAsVfx300()
+    {
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="NoId">
+                  <segment>
+                    <source><sm/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "A <sm> element in unit 'NoId' does not declare the required id attribute.");
+    }
+
+    [TestMethod]
+    public void AnEndMarkerWithoutStartRefIsRefusedAsVfx300()
+    {
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="NoStartRef">
+                  <segment>
+                    <source><sm id="s1"/><em/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "A <em> element in unit 'NoStartRef' does not declare the required startRef attribute.");
+    }
+
+    [TestMethod]
+    public void ANonIsolatedEndCodeWithoutStartRefIsRefusedAsVfx300()
+    {
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="NoStartRef">
+                  <segment>
+                    <source><sc id="1"/><ec/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "A <ec> element in unit 'NoStartRef' does not declare the required startRef attribute.");
+    }
+
+    [TestMethod]
+    public void AnEndCodeStartRefNamingNoOpenStartIsRefusedAsVfx300()
+    {
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="NoOpenStart">
+                  <segment>
+                    <source><ec startRef="ghost"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "The <ec> in unit 'NoOpenStart' has startRef 'ghost', which names no open <sc> on this side.");
+    }
+
+    [TestMethod]
+    public void AnIsolatedEndCodeWithoutIdIsRefusedAsVfx300()
+    {
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="NoId">
+                  <segment>
+                    <source><ec isolated="yes"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "An isolated <ec> element in unit 'NoId' does not declare the required id attribute.");
+    }
+
+    [TestMethod]
+    public void AnIsolatedEndCodeWithStartRefIsRefusedAsVfx300()
+    {
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="BothIdAndStartRef">
+                  <segment>
+                    <source><sc id="1"/><ec id="2" isolated="yes" startRef="1"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "An isolated <ec> element in unit 'BothIdAndStartRef' must not declare a startRef attribute; XLIFF 2.1 §4.2.3.5 uses id instead.");
+    }
+
+    [TestMethod]
+    public void AnIsolatedStartCodeClosedByAnEndCodeIsRefusedAsVfx300()
+    {
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="IsolatedClosed">
+                  <segment>
+                    <source><sc id="1" isolated="yes"/>text<ec startRef="1"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "The <sc> with id '1' in unit 'IsolatedClosed' is isolated and must not be closed by an <ec>.");
+    }
+
+    [TestMethod]
+    public void ANonIsolatedStartCodeLeftOpenAtTheUnitsEndIsRefusedAsVfx300()
+    {
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="NeverClosed">
+                  <segment>
+                    <source><sc id="1"/>text</source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "Unit 'NeverClosed' has a <sc> with id '1' on the source side that is never closed by a matching <ec>; mark it isolated=\"yes\" if it truly has none in this unit.");
+    }
+
+    [TestMethod]
+    public void AnEndMarkerStartRefNamingNoOpenStartMarkerIsRefusedAsVfx300()
+    {
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="NoOpenSm">
+                  <segment>
+                    <source><em startRef="ghost"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "The <em> in unit 'NoOpenSm' has startRef 'ghost', which names no open <sm> on this side.");
+    }
+
+    [TestMethod]
+    public void ASubTypeWithoutATypeIsRefusedAsVfx300()
+    {
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="SubTypeAlone">
+                  <segment>
+                    <source><ph id="1" subType="xlf:b"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "A <ph> element in unit 'SubTypeAlone' has subType 'xlf:b' without a type; XLIFF 2.1 §4.3.1.36 requires subType to only be used together with type.");
+    }
+
+    [TestMethod]
+    public void AReservedFormattingSubTypeWithTheWrongTypeIsRefusedAsVfx300()
+    {
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="WrongType">
+                  <segment>
+                    <source><ph id="1" type="ui" subType="xlf:b"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "A <ph> element in unit 'WrongType' has the reserved subType 'xlf:b', which XLIFF 2.1 §4.3.1.36 requires type=\"fmt\" for.");
+    }
+
+    [TestMethod]
+    public void TheReservedVariableSubTypeWithTheWrongTypeIsRefusedAsVfx300()
+    {
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="WrongType">
+                  <segment>
+                    <source><ph id="1" type="fmt" subType="xlf:var"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "A <ph> element in unit 'WrongType' has the reserved subType 'xlf:var', which XLIFF 2.1 §4.3.1.36 requires type=\"ui\" for.");
+    }
+
+    [TestMethod]
+    public void ACodeTypeOutsideTheSixReservedValuesIsRefusedAsVfx300()
+    {
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="BadType">
+                  <segment>
+                    <source><ph id="1" type="bogus"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "A <ph> element in unit 'BadType' has the unsupported type 'bogus'; XLIFF 2.1 §4.3.1.40 restricts a code's type to fmt, ui, quote, link, image or other.");
+    }
+
+    [TestMethod]
+    public void ACommentAnnotationWithNeitherValueNorRefIsRefusedAsVfx300()
+    {
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="EmptyComment">
+                  <segment>
+                    <source><mrk id="c1" type="comment">flagged</mrk></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "The comment annotation 'c1' in unit 'EmptyComment' has neither a value nor a ref attribute; XLIFF 2.1 §4.7.3.1.3 requires one.");
+    }
+
+    [TestMethod]
+    public void ACommentAnnotationWithOnlyAValueIsAccepted()
+    {
+        //Named killer: XliffSourceGenerator.InlineContent.cs, TryParseAnnotationAttributes's "neither
+        //value nor ref" check joined by && - a mutant changing it to || would refuse this comment
+        //(which carries value but no ref) even though XLIFF 2.1 §4.7.3.1.3 only requires one of the
+        //two, not both; this test would then see a VFX300 diagnostic instead of a generated accessor.
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="ValueOnlyComment">
+                  <segment>
+                    <source><mrk id="c1" type="comment" value="looks off">flagged</mrk></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        Assert.HasCount(0, result.Diagnostics);
+        string code = result.Results[0].GeneratedSources[0].SourceText.ToString();
+        Assert.Contains("\"flagged\"", code, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void ADataRefNamingNoDataEntryIsRefusedAsVfx300()
+    {
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="Missing">
+                  <segment>
+                    <source><ph id="1" dataRef="nowhere"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "references the <data> id 'nowhere', which the unit does not define.");
+    }
+
+    [TestMethod]
+    public void AHexValueWithANonHexadecimalCharacterIsRefusedAsVfx300()
+    {
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="BadHex">
+                  <segment>
+                    <source><cp hex="ZZ"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "has the hex value 'ZZ', which is not a valid hexadecimal number.");
+    }
+
+    [TestMethod]
+    public void AHexValueOfTheWrongLengthIsRefusedAsVfx300()
+    {
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="BadLength">
+                  <segment>
+                    <source><cp hex="ABC"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "has the hex value 'ABC', which must be 2, 4 or 6 hexadecimal digits (XLIFF 2.1 §4.2.3.1).");
+    }
+
+    [TestMethod]
+    public void AHexValueAboveTheMaximumCodePointIsRefusedAsVfx300()
+    {
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="TooLarge">
+                  <segment>
+                    <source><cp hex="110000"/></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "naming code point U+110000, which exceeds the maximum U+10FFFF.");
+    }
+
+    [TestMethod]
+    public void AForeignNamespaceElementInsideContentIsRefusedAsVfx300()
+    {
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="Foreign">
+                  <segment>
+                    <source>Hello <bar xmlns="urn:example:foo">World</bar></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "A <bar> element from another namespace appears inside inline content in unit 'Foreign'; XLIFF 2.1 §4.7 inline content allows only the core inline elements.");
+    }
+
+    [TestMethod]
+    public void AnUnrecognizedCoreNamespaceElementInsideContentIsRefusedAsVfx300()
+    {
+        var result = RunGenerator("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="Unrecognized">
+                  <segment>
+                    <source>Hello <note>World</note></source>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "Bootstrap", TestContext.CancellationToken);
+
+        AssertParseFailure(result, "A <note> element inside inline content in unit 'Unrecognized' is not a recognized XLIFF inline element.");
+    }
+
+    /// <summary>Asserts <paramref name="result"/> is a single VFX300 parse-failure diagnostic whose message contains <paramref name="reasonSubstring"/>, and that no source was generated.</summary>
+    /// <param name="result">The generator run to check.</param>
+    /// <param name="reasonSubstring">The structural-fault reason expected inside the diagnostic message.</param>
+    private static void AssertParseFailure(GeneratorDriverRunResult result, string reasonSubstring)
+    {
         Assert.HasCount(1, result.Diagnostics);
         Assert.AreEqual(WellKnownGeneratorDiagnostics.ParseFailure, result.Diagnostics[0].Id);
-        Assert.Contains("Inline markup <mrk>", result.Diagnostics[0].GetMessage(CultureInfo.InvariantCulture), StringComparison.Ordinal);
+        Assert.Contains(reasonSubstring, result.Diagnostics[0].GetMessage(CultureInfo.InvariantCulture), StringComparison.Ordinal);
+        Assert.HasCount(0, result.Results[0].GeneratedSources);
+    }
+
+    /// <summary>Extracts the text of one generated language dictionary literal (for example <c>LanguageFi</c>), so a key can be asserted as present inside that specific table rather than merely anywhere in the file.</summary>
+    /// <param name="result">The generator run whose first generated source is scanned.</param>
+    /// <param name="fieldName">The generated field name of the language table, such as <c>LanguageFi</c>.</param>
+    /// <returns>The dictionary initializer's text, from its opening <c>new</c> to its closing <c>};</c>.</returns>
+    private static string LanguageTableText(GeneratorDriverRunResult result, string fieldName)
+    {
+        string code = result.Results[0].GeneratedSources[0].SourceText.ToString();
+        int start = code.IndexOf(fieldName + " = new", StringComparison.Ordinal);
+        Assert.IsTrue(start >= 0, $"The generated source does not declare a '{fieldName}' field.");
+        int end = code.IndexOf("};", start, StringComparison.Ordinal);
+        Assert.IsTrue(end >= 0);
+
+        return code.Substring(start, end - start);
     }
 
     [TestMethod]

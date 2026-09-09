@@ -13,7 +13,8 @@ namespace Lumoin.Vericula.SourceGenerators;
 /// <see cref="XliffDocumentModel"/> carries the document-level position document-level failures use.
 /// </remarks>
 /// <param name="Id">The unit's id.</param>
-/// <param name="SourceText">The unit's folded source text.</param>
+/// <param name="SourceText">The unit's folded source text, the <c>Markup</c> rendering used as the accessor's value.</param>
+/// <param name="SourcePlainText">The unit's folded source text, the <c>Plain</c> rendering (text and <c>equiv</c> only) used for the accessor's XML-doc summary so IntelliSense stays readable.</param>
 /// <param name="TargetText">The unit's folded target text, or <see langword="null"/> when the unit has no complete translation.</param>
 [DebuggerDisplay("UnitModel: {Id}")]
-internal sealed record UnitModel(string Id, string SourceText, string? TargetText);
+internal sealed record UnitModel(string Id, string SourceText, string SourcePlainText, string? TargetText);

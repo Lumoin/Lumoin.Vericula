@@ -96,6 +96,18 @@ internal static class WellKnownXliffElements
     /// <summary>The standalone end of an annotation per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#em">XLIFF 2.1, em</see>; it carries no text.</summary>
     public static readonly string EndMarker = Utf8Constants.ToInternedString(EndMarkerUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="OriginalData"/>.</summary>
+    public static ReadOnlySpan<byte> OriginalDataUtf8 => "originalData"u8;
+
+    /// <summary>The container of a unit's <c>data</c> entries per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#originalData">XLIFF 2.1, originalData</see>.</summary>
+    public static readonly string OriginalData = Utf8Constants.ToInternedString(OriginalDataUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="Data"/>.</summary>
+    public static ReadOnlySpan<byte> DataUtf8 => "data"u8;
+
+    /// <summary>One original-data entry a code refers to by id per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#data">XLIFF 2.1, data</see>.</summary>
+    public static readonly string Data = Utf8Constants.ToInternedString(DataUtf8);
+
     /// <summary>Determines if an element's local name is <see cref="Xliff"/>.</summary>
     /// <param name="localName">The element's local name.</param>
     /// <returns><see langword="true"/> if the element is the root; otherwise, <see langword="false"/>.</returns>
@@ -116,20 +128,53 @@ internal static class WellKnownXliffElements
     /// <returns><see langword="true"/> if the element is an ignorable; otherwise, <see langword="false"/>.</returns>
     public static bool IsIgnorable(string localName) => string.Equals(localName, Ignorable, StringComparison.Ordinal);
 
-    /// <summary>
-    /// Determines if an element's local name is one of the inline codes or annotation markers this
-    /// generator does not fold into text: <see cref="CodePoint"/>, <see cref="Placeholder"/>,
-    /// <see cref="StartCode"/>, <see cref="EndCode"/>, <see cref="PairedCode"/>, <see cref="Marker"/>,
-    /// <see cref="StartMarker"/> or <see cref="EndMarker"/>.
-    /// </summary>
+    /// <summary>Determines if an element's local name is <see cref="CodePoint"/>.</summary>
     /// <param name="localName">The element's local name.</param>
-    /// <returns><see langword="true"/> if folding the element to text would lose data; otherwise, <see langword="false"/>.</returns>
-    public static bool IsUnsupportedInlineMarkup(string localName) => string.Equals(localName, CodePoint, StringComparison.Ordinal)
-        || string.Equals(localName, Placeholder, StringComparison.Ordinal)
-        || string.Equals(localName, StartCode, StringComparison.Ordinal)
-        || string.Equals(localName, EndCode, StringComparison.Ordinal)
-        || string.Equals(localName, PairedCode, StringComparison.Ordinal)
-        || string.Equals(localName, Marker, StringComparison.Ordinal)
-        || string.Equals(localName, StartMarker, StringComparison.Ordinal)
-        || string.Equals(localName, EndMarker, StringComparison.Ordinal);
+    /// <returns><see langword="true"/> if the element is a code point; otherwise, <see langword="false"/>.</returns>
+    public static bool IsCodePoint(string localName) => string.Equals(localName, CodePoint, StringComparison.Ordinal);
+
+    /// <summary>Determines if an element's local name is <see cref="Placeholder"/>.</summary>
+    /// <param name="localName">The element's local name.</param>
+    /// <returns><see langword="true"/> if the element is a standalone placeholder code; otherwise, <see langword="false"/>.</returns>
+    public static bool IsPlaceholder(string localName) => string.Equals(localName, Placeholder, StringComparison.Ordinal);
+
+    /// <summary>Determines if an element's local name is <see cref="StartCode"/>.</summary>
+    /// <param name="localName">The element's local name.</param>
+    /// <returns><see langword="true"/> if the element is a spanning code's start marker; otherwise, <see langword="false"/>.</returns>
+    public static bool IsStartCode(string localName) => string.Equals(localName, StartCode, StringComparison.Ordinal);
+
+    /// <summary>Determines if an element's local name is <see cref="EndCode"/>.</summary>
+    /// <param name="localName">The element's local name.</param>
+    /// <returns><see langword="true"/> if the element is a spanning code's end marker; otherwise, <see langword="false"/>.</returns>
+    public static bool IsEndCode(string localName) => string.Equals(localName, EndCode, StringComparison.Ordinal);
+
+    /// <summary>Determines if an element's local name is <see cref="PairedCode"/>.</summary>
+    /// <param name="localName">The element's local name.</param>
+    /// <returns><see langword="true"/> if the element is a well-formed spanning code; otherwise, <see langword="false"/>.</returns>
+    public static bool IsPairedCode(string localName) => string.Equals(localName, PairedCode, StringComparison.Ordinal);
+
+    /// <summary>Determines if an element's local name is <see cref="Marker"/>.</summary>
+    /// <param name="localName">The element's local name.</param>
+    /// <returns><see langword="true"/> if the element is a wrapping annotation marker; otherwise, <see langword="false"/>.</returns>
+    public static bool IsMarker(string localName) => string.Equals(localName, Marker, StringComparison.Ordinal);
+
+    /// <summary>Determines if an element's local name is <see cref="StartMarker"/>.</summary>
+    /// <param name="localName">The element's local name.</param>
+    /// <returns><see langword="true"/> if the element is a split annotation's start marker; otherwise, <see langword="false"/>.</returns>
+    public static bool IsStartMarker(string localName) => string.Equals(localName, StartMarker, StringComparison.Ordinal);
+
+    /// <summary>Determines if an element's local name is <see cref="EndMarker"/>.</summary>
+    /// <param name="localName">The element's local name.</param>
+    /// <returns><see langword="true"/> if the element is a split annotation's end marker; otherwise, <see langword="false"/>.</returns>
+    public static bool IsEndMarker(string localName) => string.Equals(localName, EndMarker, StringComparison.Ordinal);
+
+    /// <summary>Determines if an element's local name is <see cref="OriginalData"/>.</summary>
+    /// <param name="localName">The element's local name.</param>
+    /// <returns><see langword="true"/> if the element is a unit's original-data container; otherwise, <see langword="false"/>.</returns>
+    public static bool IsOriginalData(string localName) => string.Equals(localName, OriginalData, StringComparison.Ordinal);
+
+    /// <summary>Determines if an element's local name is <see cref="Data"/>.</summary>
+    /// <param name="localName">The element's local name.</param>
+    /// <returns><see langword="true"/> if the element is one original-data entry; otherwise, <see langword="false"/>.</returns>
+    public static bool IsData(string localName) => string.Equals(localName, Data, StringComparison.Ordinal);
 }
