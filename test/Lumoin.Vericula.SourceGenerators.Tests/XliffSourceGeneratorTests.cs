@@ -1467,8 +1467,8 @@ public sealed class XliffSourceGeneratorTests
     [TestMethod]
     public void ACommentAnnotationWithOnlyAValueIsAccepted()
     {
-        //Named killer: XliffSourceGenerator.InlineContent.cs, TryParseAnnotationAttributes's "neither
-        //value nor ref" check joined by && - a mutant changing it to || would refuse this comment
+        //Named killer: XliffSourceGenerator.InlineContent.cs:523, TryParseAnnotationAttributes's
+        //"neither value nor ref" check joined by && - a mutant changing it to || would refuse this comment
         //(which carries value but no ref) even though XLIFF 2.1 §4.7.3.1.3 only requires one of the
         //two, not both; this test would then see a VFX300 diagnostic instead of a generated accessor.
         var result = RunGenerator("""
@@ -1646,6 +1646,82 @@ public sealed class XliffSourceGeneratorTests
             CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("fi");
 
             Assert.AreEqual("Hello", GetAccessor(translationsType, "Untranslated"));
+        }
+        finally
+        {
+            CultureInfo.CurrentUICulture = originalCulture;
+            context.Unload();
+        }
+    }
+
+    [TestMethod]
+    public void AnIgnorableWithAPresentButEmptyTargetFallsBackToItsSource()
+    {
+        //Twin: test/Lumoin.Vericula.Tests/GeneratorRendererTwinTests.cs AnIgnorableWithAPresentButEmptyTargetFallsBackToItsSource
+        //Named killer: XliffSourceGenerator.cs:231 (ParseDocument, target fold) - folding on
+        //"targetElement is null" instead of the emptiness-aware "hasTargetContent" would append the
+        //ignorable's empty targetMarkup instead of its own source (the single space), yielding
+        //"Heimaailma" instead of the "Hei maailma" asserted below.
+        (Type translationsType, AssemblyLoadContext context) = EmitAndLoad("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en" trgLang="fi">
+              <file id="wallet">
+                <unit id="IgnorableEmptyTarget">
+                  <segment>
+                    <source>Hello</source>
+                    <target>Hei</target>
+                  </segment>
+                  <ignorable>
+                    <source> </source>
+                    <target></target>
+                  </ignorable>
+                  <segment>
+                    <source>World</source>
+                    <target>maailma</target>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "IgnorableEmptyTarget", TestContext.CancellationToken);
+        CultureInfo originalCulture = CultureInfo.CurrentUICulture;
+        try
+        {
+            CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("fi");
+
+            Assert.AreEqual("Hei maailma", GetAccessor(translationsType, "IgnorableEmptyTarget"));
+        }
+        finally
+        {
+            CultureInfo.CurrentUICulture = originalCulture;
+            context.Unload();
+        }
+    }
+
+    [TestMethod]
+    public void AWholeSegmentInsideAMrkTranslateNoWithAnEmptyTargetElementFoldsItsSource()
+    {
+        //Twin: test/Lumoin.Vericula.Tests/GeneratorRendererTwinTests.cs AWholeSegmentInsideAMrkTranslateNoWithAnEmptyTargetElementFoldsItsSource
+        //Named killer: XliffSourceGenerator.cs:231 (ParseDocument, target fold) - the same mutant as
+        //AnIgnorableWithAPresentButEmptyTargetFallsBackToItsSource, this time on a translatable
+        //segment whose own translatable text is empty (fully inside translate="no"): a present but
+        //empty <target> must still fall back to the segment's source instead of folding in "".
+        (Type translationsType, AssemblyLoadContext context) = EmitAndLoad("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en" trgLang="fi">
+              <file id="wallet">
+                <unit id="EmptyTargetNotATarget">
+                  <segment>
+                    <source><mrk id="m1" translate="no">Internal only</mrk></source>
+                    <target></target>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """, "EmptyTargetNotATarget", TestContext.CancellationToken);
+        CultureInfo originalCulture = CultureInfo.CurrentUICulture;
+        try
+        {
+            CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("fi");
+
+            Assert.AreEqual("Internal only", GetAccessor(translationsType, "EmptyTargetNotATarget"));
         }
         finally
         {

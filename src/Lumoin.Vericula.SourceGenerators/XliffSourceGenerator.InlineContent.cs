@@ -650,7 +650,8 @@ public sealed partial class XliffSourceGenerator
 
         //Mirrors InlineContent.RenderCodeText's own call: the third clue of TryResolve (matching a tag
         //name recovered from original data) can never fire here, because a non-null originalDataText
-        //already returned above; WellKnownInlineTokensTests exercises that clue directly instead.
+        //already returned above; this project's own WellKnownInlineTokensTests exercises that clue
+        //directly instead.
         if(WellKnownInlineTokens.TryResolve(type, subType, null, out string name))
         {
             return (name, true);

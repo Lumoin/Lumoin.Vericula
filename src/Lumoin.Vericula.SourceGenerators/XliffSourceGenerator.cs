@@ -206,6 +206,11 @@ public sealed partial class XliffSourceGenerator: IIncrementalGenerator
 
                     string targetMarkup = RenderMarkup(targetParts);
 
+                    //A present-but-empty <target> collapses to a null TargetContent in the core reader
+                    //(XliffReader), so both the completeness gate below and the fold at the end of this
+                    //loop must treat it the same as an absent <target>, not merely check element presence.
+                    bool hasTargetContent = targetElement is not null && targetParts.Length != 0;
+
                     //Walked for every segment and ignorable, translatable or not, so the stack stays
                     //correctly threaded across the whole unit (5.1); only a translatable segment's own
                     //text feeds the completeness check below.
@@ -216,19 +221,18 @@ public sealed partial class XliffSourceGenerator: IIncrementalGenerator
                         sawSegment = true;
                         bool needsTranslation = WellKnownXliffAttributeValues.IsStateInitial(child.Attribute(WellKnownXliffAttributes.State)?.Value)
                             && WellKnownVericulaMetadata.IsNeedsTranslationSubState(child.Attribute(WellKnownXliffAttributes.SubState)?.Value);
-                        bool hasTargetContent = targetElement is not null && targetParts.Length != 0;
                         if(needsTranslation || !(hasTargetContent || translatableSourceText.Length == 0))
                         {
                             translationComplete = false;
                         }
                     }
 
-                    //Every segment and ignorable alike folds its own target when it has one (an
-                    //element present, however it renders) and its own source otherwise, matching
-                    //XliffUnit.RenderTarget's fold (5.1); a segment can reach this fallback branch too
-                    //now, whenever the completeness exemption above lets a target-less segment count
-                    //as complete.
-                    targetBuilder.Append(targetElement is null ? sourceMarkup : targetMarkup);
+                    //Every segment and ignorable alike folds its own target when it has one (present and
+                    //non-empty, matching XliffUnit.TargetContent's non-null test) and its own source
+                    //otherwise, matching XliffUnit.RenderTarget's fold (5.1); a segment can reach this
+                    //fallback branch too, whenever the completeness exemption above lets a target-less
+                    //or empty-target segment count as complete.
+                    targetBuilder.Append(hasTargetContent ? targetMarkup : sourceMarkup);
                 }
 
                 if(!TryRequireStartCodesClosedOrIsolated(sourceState, id!, "source", out string? sourceOpenFailure))

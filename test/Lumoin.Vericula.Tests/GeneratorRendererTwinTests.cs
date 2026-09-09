@@ -200,4 +200,58 @@ public sealed class GeneratorRendererTwinTests
 
         Assert.AreEqual("Hei ACME maailma", unit.RenderTarget(InlineRendering.Markup));
     }
+
+    [TestMethod]
+    public void AnIgnorableWithAPresentButEmptyTargetFallsBackToItsSource()
+    {
+        //Twin: test/Lumoin.Vericula.SourceGenerators.Tests/XliffSourceGeneratorTests.cs AnIgnorableWithAPresentButEmptyTargetFallsBackToItsSource
+        //5.1: the reader turns a present-but-empty <target> into a null TargetContent, the same as an
+        //absent one, so RenderTarget's fold uses the ignorable's own source (the single space) between
+        //the two translated segments.
+        XliffUnit unit = ReadFirstUnit("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en" trgLang="fi">
+              <file id="wallet">
+                <unit id="IgnorableEmptyTarget">
+                  <segment>
+                    <source>Hello</source>
+                    <target>Hei</target>
+                  </segment>
+                  <ignorable>
+                    <source> </source>
+                    <target></target>
+                  </ignorable>
+                  <segment>
+                    <source>World</source>
+                    <target>maailma</target>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """);
+
+        Assert.AreEqual("Hei maailma", unit.RenderTarget(InlineRendering.Markup));
+    }
+
+    [TestMethod]
+    public void AWholeSegmentInsideAMrkTranslateNoWithAnEmptyTargetElementFoldsItsSource()
+    {
+        //Twin: test/Lumoin.Vericula.SourceGenerators.Tests/XliffSourceGeneratorTests.cs AWholeSegmentInsideAMrkTranslateNoWithAnEmptyTargetElementFoldsItsSource
+        //5.1: a present-but-empty <target> is a null TargetContent (XliffReader), so RenderTarget falls
+        //back to the segment's source even though the segment's own translatable text is empty (fully
+        //inside translate="no").
+        XliffUnit unit = ReadFirstUnit("""
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en" trgLang="fi">
+              <file id="wallet">
+                <unit id="EmptyTargetNotATarget">
+                  <segment>
+                    <source><mrk id="m1" translate="no">Internal only</mrk></source>
+                    <target></target>
+                  </segment>
+                </unit>
+              </file>
+            </xliff>
+            """);
+
+        Assert.AreEqual("Internal only", unit.RenderTarget(InlineRendering.Markup));
+    }
 }
