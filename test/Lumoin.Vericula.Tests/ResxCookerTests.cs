@@ -30,6 +30,7 @@ public sealed class ResxCookerTests
     private static readonly string[] EnFiResources = ["wallet.resx", "wallet.fi.resx"];
     private static readonly string[] EnFiDeResources = ["wallet.resx", "wallet.fi.resx", "wallet.de.resx"];
     private static readonly string[] WalletBaseResources = ["Wallet.resx", "Wallet.fi.resx"];
+    private static readonly string[] BareCultureBaseNameResources = ["fi.resx", "fi.fi.resx"];
 
     [TestMethod]
     public void EmitsNeutralAndOneSatellitePerCulture()
@@ -363,6 +364,19 @@ public sealed class ResxCookerTests
     }
 
     [TestMethod]
+    public void BaseNameWithNoDotIsNotTreatedAsItsOwnCultureSuffix()
+    {
+        //ResxCooker.cs:141, lastDot >= 0 ? baseName[(lastDot + 1)..] : string.Empty => the ternary
+        //always takes the true branch. With no dot in baseName (lastDot == -1), baseName[(lastDot +
+        //1)..] equals baseName[0..], the whole name, so a bare culture name such as "fi" would wrongly
+        //compute trailingSegment = "fi" and throw, instead of the correct empty trailing segment that
+        //lets Cook proceed.
+        ImmutableArrayLike resources = Cook(new ResxCookOptions { BaseName = "fi" }, EnFi);
+
+        CollectionAssert.AreEquivalent(BareCultureBaseNameResources, resources.FileNames);
+    }
+
+    [TestMethod]
     public void ThrowsArgumentNullExceptionWhenDocumentsIsNull()
     {
         //ResxCooker.cs:40, ArgumentNullException.ThrowIfNull(documents); => ; — removing the guard
@@ -540,6 +554,53 @@ public sealed class ResxCookerTests
         ArgumentException exception = Assert.ThrowsExactly<ArgumentException>(() => Cook(xliff));
         Assert.Contains("Ctrl", exception.Message, StringComparison.Ordinal);
         Assert.Contains("fi", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void ALoneHighSurrogateAtTheEndOfTheSourceIsRefusedAsUnsafe()
+    {
+        //ResxCooker.cs:264, char.IsHighSurrogate(current) && index + 1 < value.Length &&
+        //char.IsLowSurrogate(value[index + 1]) => the first && changed to ||. With a lone, unpaired
+        //high surrogate as the value's last character, index + 1 == value.Length, so the length guard
+        //must stay false and the pair check must never run; the || mutant short-circuits true on
+        //IsHighSurrogate alone and treats the lone surrogate as a safe, skippable pair, so Cook wrongly
+        //does not throw. Also kills index + 1 <= value.Length and the first index + 1 => index - 1 at
+        //the same line: both let the boundary guard pass and then read value[index + 1] out of bounds
+        //instead of throwing the documented ArgumentException.
+        const string xliff = """
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="Lone"><segment><source>Ctrl+C=<cp hex="D800"/></source></segment></unit>
+              </file>
+            </xliff>
+            """;
+
+        ArgumentException exception = Assert.ThrowsExactly<ArgumentException>(() => Cook(xliff));
+        Assert.Contains("Lone", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("the neutral resource", exception.Message, StringComparison.Ordinal);
+    }
+
+    [TestMethod]
+    public void AnAstralCharacterFromAValidSurrogatePairCooksAsOneSafeCharacter()
+    {
+        //ResxCooker.cs:264-268: a genuine mid-string surrogate pair must advance the loop past both
+        //code units without being flagged unsafe. Kills index + 1 < value.Length turned into
+        //index + 1 > value.Length and the second index + 1 => index - 1 inside value[index + 1] (both
+        //make the pair check wrongly fail, so Cook throws for a value that should be accepted), index
+        //+= 1 turned into index -= 1 (the loop never advances past the pair and hangs forever on the
+        //same index instead of terminating), and continue; removed (execution falls through to the
+        //still-unadvanced high surrogate, which alone is never XML-safe, so Cook wrongly throws).
+        const string xliff = """
+            <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
+              <file id="wallet">
+                <unit id="Emoji"><segment><source>A<cp hex="D83D"/><cp hex="DE00"/>B</source></segment></unit>
+              </file>
+            </xliff>
+            """;
+
+        Dictionary<string, string> neutral = DataOf(Cook(xliff), "wallet.resx");
+
+        Assert.AreEqual("A" + char.ConvertFromUtf32(0x1F600) + "B", neutral["Emoji"]);
     }
 
     /// <summary>
