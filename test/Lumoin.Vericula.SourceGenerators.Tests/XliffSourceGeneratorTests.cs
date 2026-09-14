@@ -2684,7 +2684,7 @@ public sealed class XliffSourceGeneratorTests
     {
         //r1-57: a generator must target netstandard2.0 to load into every compiler host,
         //including the in-process Visual Studio language service, which runs on .NET
-        //Framework; targeting net10.0 loads only under the matching .NET SDK compiler.
+        //Framework; targeting net11.0 loads only under the matching .NET SDK compiler.
         var targetFrameworkAttribute = typeof(XliffSourceGenerator).Assembly
             .GetCustomAttribute<System.Runtime.Versioning.TargetFrameworkAttribute>();
 

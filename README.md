@@ -31,7 +31,7 @@
 - Projects a document into an RDF graph and writes it as Turtle, through [`Lumoin.Veritas`](https://www.nuget.org/packages/Lumoin.Veritas.Core/).
 - Generates one `Translations` class per compilation, with one static string property per unit id resolved against the current UI culture, then its parent cultures, then its neutral two-letter subtag, then the source language, and finally the id itself; a file that fails to parse is `VFX300`, an invalid unit id is `VFX301`.
 
-Lumoin.Vericula targets **.NET 10** and is AOT-compatible; both packed libraries have nullable enabled and declare no interfaces or DI container wiring.
+Lumoin.Vericula targets **.NET 11** and is AOT-compatible; both packed libraries have nullable enabled and declare no interfaces or DI container wiring.
 
 ## Known limitations
 

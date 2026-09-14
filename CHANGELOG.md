@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 - Every enum now declares explicit, dense member values that are part of the public contract and will not be renumbered; `MarkupKind` gains `None = 0` for the uninitialized state, so `Open`, `Standalone` and `Close` are 1, 2 and 3.
 - README rewritten for the first NuGet publication: it describes only the current behaviour of the packages, and every link is absolute so it renders on nuget.org.
+- Moved to .NET 11 (SDK 11.0.100-rc.1) and `Lumoin.Base` 0.0.14; `Microsoft.Extensions.*` follow to 11.0; MSTest.Sdk 4.4.0.
 
 ### Fixed
 
