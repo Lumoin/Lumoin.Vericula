@@ -559,12 +559,14 @@ public sealed class ResxCookerTests
     [TestMethod]
     public void ALoneHighSurrogateAtTheEndOfTheSourceIsRefusedAsUnsafe()
     {
-        //ResxCooker.cs:264, char.IsHighSurrogate(current) && index + 1 < value.Length &&
+        //S-011, ResxCooker.cs:264, char.IsHighSurrogate(current) && index + 1 < value.Length &&
         //char.IsLowSurrogate(value[index + 1]) => the first && changed to ||. With a lone, unpaired
         //high surrogate as the value's last character, index + 1 == value.Length, so the length guard
         //must stay false and the pair check must never run; the || mutant short-circuits true on
-        //IsHighSurrogate alone and treats the lone surrogate as a safe, skippable pair, so Cook wrongly
-        //does not throw. Also kills index + 1 <= value.Length and the first index + 1 => index - 1 at
+        //IsHighSurrogate alone and treats the lone surrogate as a safe, skippable pair. The cooker no
+        //longer refuses it itself; XDocument later throws "The surrogate pair is invalid. Missing a
+        //low surrogate character." The assertion sees the lost domain diagnostic because the message
+        //no longer contains "Lone". Also kills index + 1 <= value.Length and the first index + 1 => index - 1 at
         //the same line: both let the boundary guard pass and then read value[index + 1] out of bounds
         //instead of throwing the documented ArgumentException.
         const string xliff = """
@@ -580,8 +582,9 @@ public sealed class ResxCookerTests
         Assert.Contains("the neutral resource", exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Proves a valid surrogate pair cooks safely and the scan advances past both code units.</summary>
     [TestMethod]
-    public void AnAstralCharacterFromAValidSurrogatePairCooksAsOneSafeCharacter()
+    public async Task AnAstralCharacterFromAValidSurrogatePairCooksAsOneSafeCharacter()
     {
         //ResxCooker.cs:264-268: a genuine mid-string surrogate pair must advance the loop past both
         //code units without being flagged unsafe. Kills index + 1 < value.Length turned into
@@ -590,6 +593,9 @@ public sealed class ResxCookerTests
         //+= 1 turned into index -= 1 (the loop never advances past the pair and hangs forever on the
         //same index instead of terminating), and continue; removed (execution falls through to the
         //still-unadvanced high surrogate, which alone is never XML-safe, so Cook wrongly throws).
+        //N-006, ResxCooker.cs:266, index += 1 => index -= 1 revisits the pair forever. The deadline
+        //turns that lost progress into a named assertion failure. The CPU-spinning worker cannot be
+        //cancelled and is abandoned after the assertion in a proof run, until the process exits.
         const string xliff = """
             <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en">
               <file id="wallet">
@@ -598,10 +604,23 @@ public sealed class ResxCookerTests
             </xliff>
             """;
 
-        Dictionary<string, string> neutral = DataOf(Cook(xliff), "wallet.resx");
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(10));
+        try
+        {
+            var cooking = Task.Run(() => Cook(xliff), deadline.Token);
+            Dictionary<string, string> neutral = DataOf(await cooking.WaitAsync(deadline.Token), "wallet.resx");
 
-        Assert.AreEqual("A" + char.ConvertFromUtf32(0x1F600) + "B", neutral["Emoji"]);
+            Assert.AreEqual("A" + char.ConvertFromUtf32(0x1F600) + "B", neutral["Emoji"]);
+        }
+        catch(OperationCanceledException) when(deadline.IsCancellationRequested && !TestContext.CancellationToken.IsCancellationRequested)
+        {
+            Assert.Fail("cooking a valid surrogate pair did not finish within ten seconds; the index no longer advances past the pair");
+        }
     }
+
+    /// <summary>Gets or sets the current test context and its cancellation token.</summary>
+    public TestContext TestContext { get; set; } = null!;
 
     /// <summary>
     /// Reads and cooks the given XLIFF documents with default options.
