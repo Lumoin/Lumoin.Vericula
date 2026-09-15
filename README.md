@@ -21,6 +21,7 @@
 ## What it does today
 
 - Reads and writes **XLIFF 2.0 and 2.1**: files, groups, units, notes, every segment with its id, state and sub-state, and every ignorable with its id.
+- Reads and writes inline codes and annotations, including split spans across segments.
 - Reads the Validation module on files, the Glossary module on units, and the Metadata module — tone/register profiles, file-wide glossaries, scopes and named metadata in Vericula-named groups.
 - Reads a whole document from a stream or a `PipeReader`.
 - Streams units one at a time as an `IEnumerable` or `IAsyncEnumerable`, without materialising the document.
@@ -35,7 +36,7 @@ Lumoin.Vericula targets **.NET 11** and is AOT-compatible; both packed libraries
 
 ## Known limitations
 
-- Inline markup inside `<source>`/`<target>` is rejected with an error rather than flattened — the reader reads plain text only.
+- Inline `pc`, `ph`, `sc`/`ec`, `cp`, `mrk` and `sm`/`em` elements with `originalData` are supported; codes and annotations round-trip in the form read. Cooked resx values use their original markup, or plain text through `InlineRendering.Plain`; the linter respects `translate="no"` annotations when checking missing targets. Foreign-namespace inline elements are refused; namespace-qualified attributes on inline elements and unreferenced `originalData` entries are dropped. Attribute layout is normalized on write, and two `cp` elements forming a surrogate pair merge into one character. `comment` references and `subFlows` are not resolved; the CLI has no plain-text flag yet.
 - XLIFF 2.2 and 1.2 are not supported.
 - The reader rejects duplicate file ids in a document, duplicate unit ids within a file, duplicate segment ids within a unit, targets declared without a `trgLang`, unknown segment states, and validation rules on groups or units; validation rules attach to the file.
 - Validation rules asking for case-insensitive matching, a normalisation other than none or NFC, occurrence counts, or source conditioning are rejected; the linter applies only NFC or no normalisation.

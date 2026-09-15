@@ -9,18 +9,26 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Added
 
+- `InlineContent`: a flat sequence of text, codes and annotations with `Markup` and `Plain` rendering, resolved `OriginalData` and sequence equality.
+- `XliffReader`: reads `pc`, `ph`, `sc`/`ec`, `cp`, `mrk` and `sm`/`em` with `originalData` on both whole-document and streaming paths, including split spans across segments; refuses malformed inline structure.
+- `XliffWriter`: round-trips inline codes and annotations in their original forms, writes referenced `originalData` and encodes characters XML cannot carry as `cp`, validating inline structure before writing.
 - `Lumoin.Vericula.MessageFormat`: a parser (`MessageFormatReader.Parse` and `TryParse`) for the MessageFormat 2.0 data model, reporting syntax and data model errors as `VFX2xx` diagnostics with line and position; not yet packaged.
 - Vendored the official Unicode MessageFormat 2.0 conformance test suite (tag `LDML48.2`, Unicode License V3) into the test project.
 - `ResxCookOptions.Rendering` selects the `InlineRendering` (`Markup`, the default, or `Plain`) every cooked resx value is rendered with; `WellKnownDiagnostics` gains `VFX110`, reported when an inline code renders as its `equiv` text alone. The CLI `compile` command still always cooks with the default `Markup` rendering; a `--plain-text` flag to choose `Plain` from the command line is a later change, not part of slice 0.
 
 ### Changed
 
+- `XliffSegment.SourceContent` and `TargetContent` carry `InlineContent`; segment and unit `Source`/`Target` remain `Markup` string renderings, and `XliffUnit.RenderSource`/`RenderTarget` select the rendering.
+- `Linter` evaluates validation rules and glossary checks on `Plain` rendering and respects `translate="no"` spans when checking missing targets, including spans across segments.
+- `XliffGraphProjection` emits `Plain` rendering in RDF labels.
+- `Lumoin.Vericula.SourceGenerators` renders inline content as markup in accessor values and plain text in XML-doc summaries, respects `translate="no"` completeness across segments and reports malformed inline content as `VFX300`.
 - Every enum now declares explicit, dense member values that are part of the public contract and will not be renumbered; `MarkupKind` gains `None = 0` for the uninitialized state, so `Open`, `Standalone` and `Close` are 1, 2 and 3.
 - README rewritten for the first NuGet publication: it describes only the current behaviour of the packages, and every link is absolute so it renders on nuget.org.
 - Moved to .NET 11 (SDK 11.0.100-rc.1) and `Lumoin.Base` 0.0.14; `Microsoft.Extensions.*` follow to 11.0; MSTest.Sdk 4.4.0.
 
 ### Fixed
 
+- `ResxCooker` retains code-only targets that render empty under `Plain` and rejects cooked characters XML cannot carry with an error naming the unit and culture or neutral resource.
 - `ResxCooker` and the CLI `compile` command now decide whether a name segment is a culture using predefined cultures only, so the check behaves the same on Windows (NLS) and on Linux and macOS (ICU). Before, on ICU any word passed as a culture: a base name such as `Wallet.notaculture` was refused and a `wallet.Designer.resx` in the output directory was deleted as a stale satellite.
 - Package descriptions of `Lumoin.Vericula` and `Lumoin.Vericula.SourceGenerators` now describe the packages accurately and no longer end with an internal note about where the metadata is inherited from.
 - `XliffReader` refuses more inputs it previously accepted silently or inconsistently, rather than corrupting or dropping data.
