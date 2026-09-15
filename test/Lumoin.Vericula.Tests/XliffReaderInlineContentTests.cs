@@ -15,6 +15,9 @@ namespace Lumoin.Vericula.Tests;
 [TestClass]
 public sealed class XliffReaderInlineContentTests
 {
+    /// <summary>The runner token linked to streaming deadlines.</summary>
+    public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Wraps one unit body (its children, typically <c>&lt;segment&gt;</c>/<c>&lt;originalData&gt;</c> elements) in a minimal document.</summary>
     private static string Wrap(string unitBody) =>
         $"""<xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en" trgLang="fi"><file id="f"><unit id="u">{unitBody}</unit></file></xliff>""";
@@ -36,11 +39,14 @@ public sealed class XliffReaderInlineContentTests
     }
 
     /// <summary>Wraps a unit body and expects the streaming read to throw the same way the whole-document read does (the both-path parity the reader's refusals are held to, 5.3.2).</summary>
-    private static XliffFormatException ReadUnitsExpectingFailure(string unitBody)
+    private XliffFormatException ReadUnitsExpectingFailure(string unitBody)
     {
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(Wrap(unitBody)));
 
-        return Assert.ThrowsExactly<XliffFormatException>(() => XliffReader.ReadUnits(stream).ToArray());
+        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove the priming read; T-006 at
+        //line 465 can swallow a read error. Keep the exact exception assertion on a worker,
+        //abandoning a spin only after the named ten-second failure.
+        return ReaderDeadline.Run(() => Assert.ThrowsExactly<XliffFormatException>(() => XliffReader.ReadUnits(stream).ToArray()), TestContext.CancellationToken);
     }
 
     [TestMethod]
@@ -105,9 +111,12 @@ public sealed class XliffReaderInlineContentTests
         Assert.Contains("A <sc> element does not declare the required id attribute", exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Preserves the inline refusal within a bounded streaming walk.</summary>
     [TestMethod]
     public void TheStreamingPathAlsoRejectsAStartCodeWithoutAnId()
     {
+        //T-003 at XliffReader.cs:251, T-005 at line 461 and T-006 at line 465 can stop the
+        //streaming refusal below; its helper reports a named ten-second failure and abandons the worker.
         XliffFormatException exception = ReadUnitsExpectingFailure("""<segment><source><sc/></source></segment>""");
 
         Assert.Contains("A <sc> element does not declare the required id attribute", exception.Message, StringComparison.Ordinal);
@@ -396,9 +405,12 @@ public sealed class XliffReaderInlineContentTests
         Assert.Contains("declares an id attribute without isolated=\"yes\"", exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Preserves the inline refusal within a bounded streaming walk.</summary>
     [TestMethod]
     public void TheStreamingPathAlsoRejectsANonIsolatedEndCodeThatCarriesAnId()
     {
+        //T-003 at XliffReader.cs:251, T-005 at line 461 and T-006 at line 465 can stop the
+        //streaming refusal below; its helper reports a named ten-second failure and abandons the worker.
         XliffFormatException exception = ReadUnitsExpectingFailure(
             """<segment><source><sc id="1"/>x<ec startRef="1" id="stray"/></source></segment>""");
 
@@ -559,9 +571,12 @@ public sealed class XliffReaderInlineContentTests
         Assert.Contains("has both a value and a ref attribute", exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Preserves the inline refusal within a bounded streaming walk.</summary>
     [TestMethod]
     public void TheStreamingPathAlsoRejectsACommentAnnotationWithBothValueAndRef()
     {
+        //T-003 at XliffReader.cs:251, T-005 at line 461 and T-006 at line 465 can stop the
+        //streaming refusal below; its helper reports a named ten-second failure and abandons the worker.
         //Spot-checks that the already-satisfied (c) refusal (XliffReader.InlineContent.cs:606) fires
         //identically on the streaming path; it shares ParseUnit/ParseInlineContentRoot with the
         //whole-document path (XliffReader.cs: AcceptUnit calls the same ParseUnit the whole-document
@@ -586,9 +601,12 @@ public sealed class XliffReaderInlineContentTests
         Assert.Contains("has the unsupported type 'bogus'", exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Preserves the inline refusal within a bounded streaming walk.</summary>
     [TestMethod]
     public void TheStreamingPathAlsoRejectsAnAnnotationTypeThatIsNeitherReservedNorShapedAsPrefixValue()
     {
+        //T-003 at XliffReader.cs:251, T-005 at line 461 and T-006 at line 465 can stop the
+        //streaming refusal below; its helper reports a named ten-second failure and abandons the worker.
         XliffFormatException exception = ReadUnitsExpectingFailure(
             """<segment><source><mrk id="m1" type="bogus">x</mrk></source></segment>""");
 
@@ -676,9 +694,12 @@ public sealed class XliffReaderInlineContentTests
         Assert.Contains("does not declare the required hex attribute", exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Preserves the inline refusal within a bounded streaming walk.</summary>
     [TestMethod]
     public void TheStreamingPathAlsoRejectsACodePointWithoutTheRequiredHexAttribute()
     {
+        //T-003 at XliffReader.cs:251, T-005 at line 461 and T-006 at line 465 can stop the
+        //streaming refusal below; its helper reports a named ten-second failure and abandons the worker.
         XliffFormatException exception = ReadUnitsExpectingFailure("""<segment><source><cp/></source></segment>""");
 
         Assert.Contains("does not declare the required hex attribute", exception.Message, StringComparison.Ordinal);
@@ -871,9 +892,12 @@ public sealed class XliffReaderInlineContentTests
         Assert.Contains("has the canReorder value 'maybe'; expected yes, firstNo or no", exception.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Preserves the inline refusal within a bounded streaming walk.</summary>
     [TestMethod]
     public void TheStreamingPathAlsoRejectsAnInvalidCanReorderValue()
     {
+        //T-003 at XliffReader.cs:251, T-005 at line 461 and T-006 at line 465 can stop the
+        //streaming refusal below; its helper reports a named ten-second failure and abandons the worker.
         XliffFormatException exception = ReadUnitsExpectingFailure("""<segment><source><ph id="1" canReorder="maybe"/></source></segment>""");
 
         Assert.Contains("has the canReorder value 'maybe'; expected yes, firstNo or no", exception.Message, StringComparison.Ordinal);
@@ -1205,24 +1229,32 @@ public sealed class XliffReaderInlineContentTests
 
         Assert.AreEqual(InlineContent.Empty, unit.Segments[0].SourceContent);
     }
+    /// <summary>Checks the streaming property within a bounded worker.</summary>
 
+    /// <summary>Preserves the inline refusal within a bounded streaming walk.</summary>
     [TestMethod]
     public void TheStreamingPathParsesInlineContentTheSameWayAsTheWholeDocumentRead()
     {
-        const string body = """
-            <originalData><data id="d1">\b </data></originalData>
-            <segment><source>Text in <sc id="1" dataRef="d1"/>bold<ec startRef="1"/> now.</source></segment>
-            """;
-        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(Wrap(body)));
+        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
+        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //the existing assertions still execute unchanged inside the deadline.
+        ReaderDeadline.Run(() =>
+        {
+            const string body = """
+                <originalData><data id="d1">\b </data></originalData>
+                <segment><source>Text in <sc id="1" dataRef="d1"/>bold<ec startRef="1"/> now.</source></segment>
+                """;
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(Wrap(body)));
 
-        XliffUnit unit = XliffReader.ReadUnits(stream).Single();
+            XliffUnit unit = XliffReader.ReadUnits(stream).Single();
 
-        InlineContent content = unit.Segments[0].SourceContent;
-        var start = (StartCodePart)content.Parts[1];
-        Assert.AreEqual("1", start.Id);
-        Assert.AreEqual("\\b ", start.OriginalData?.Text);
-        Assert.AreEqual("bold", ((InlineTextPart)content.Parts[2]).Text);
-        Assert.AreEqual("1", ((EndCodePart)content.Parts[3]).StartRef);
+            InlineContent content = unit.Segments[0].SourceContent;
+            var start = (StartCodePart)content.Parts[1];
+            Assert.AreEqual("1", start.Id);
+            Assert.AreEqual("\\b ", start.OriginalData?.Text);
+            Assert.AreEqual("bold", ((InlineTextPart)content.Parts[2]).Text);
+            Assert.AreEqual("1", ((EndCodePart)content.Parts[3]).StartRef);
+        }, TestContext.CancellationToken);
     }
 
     [TestMethod]

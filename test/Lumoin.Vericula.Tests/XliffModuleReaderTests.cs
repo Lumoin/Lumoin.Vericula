@@ -951,6 +951,7 @@ public sealed class XliffModuleReaderTests
         await Assert.ThrowsExactlyAsync<OperationCanceledException>(() => readTask);
     }
 
+    /// <summary>Cancels stalled pipe enumeration without blocking the caller before cancellation.</summary>
     [TestMethod]
     public async Task ReadUnitsAsyncFromAStalledPipeIsCancelledPromptly()
     {
@@ -963,6 +964,7 @@ public sealed class XliffModuleReaderTests
 
         using var cts = new CancellationTokenSource();
 
+        //Consume on a worker so synchronous spinning cannot block cancellation.
         async Task Enumerate()
         {
             await foreach(XliffUnit unit in XliffReader.ReadUnitsAsync(pipe.Reader, cts.Token))
@@ -971,7 +973,27 @@ public sealed class XliffModuleReaderTests
             }
         }
 
-        Task enumerateTask = Enumerate();
+        //T-004 at XliffReader.cs:283 and T-007 at line 479 remove the priming read. Start on
+        //a worker so the mutant cannot prevent this caller reaching cancellation. A worker
+        //that ignores cancellation is abandoned after the named ten-second deadline.
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(10));
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task enumerateTask = Task.Run(async () =>
+        {
+            Task pending = Enumerate();
+            started.SetResult();
+            await pending;
+        }, TestContext.CancellationToken);
+        try
+        {
+            await started.Task.WaitAsync(deadline.Token);
+        }
+        catch(OperationCanceledException) when(deadline.IsCancellationRequested && !TestContext.CancellationToken.IsCancellationRequested)
+        {
+            cts.Cancel();
+            Assert.Fail("Stalled pipe enumeration did not start within ten seconds.");
+        }
         cts.Cancel();
 
         Task completed = await Task.WhenAny(enumerateTask, Task.Delay(TimeSpan.FromSeconds(5), TestContext.CancellationToken));

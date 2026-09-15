@@ -1743,23 +1743,6 @@ public sealed class XliffWriterTests
         Assert.AreEqual(0, recorder.PostCount, "The writer must not post its continuation to the caller's context.");
     }
 
-    /// <summary>Records captured continuations while allowing them to finish on the thread pool.</summary>
-    private sealed class RecordingSynchronizationContext : SynchronizationContext
-    {
-        /// <summary>The number of continuations posted to this context.</summary>
-        private int postCount;
-
-        /// <summary>Gets the number of continuations posted to this context.</summary>
-        public int PostCount => Volatile.Read(ref postCount);
-
-        /// <summary>Records a continuation and dispatches it without installing this context.</summary>
-        public override void Post(SendOrPostCallback d, object? state)
-        {
-            Interlocked.Increment(ref postCount);
-            ThreadPool.QueueUserWorkItem(_ => d(state));
-        }
-    }
-
     /// <summary>Buffers a pipe write and keeps its flush suspended until the test releases a gate.</summary>
     private sealed class GatedPipeWriter : PipeWriter
     {
