@@ -320,7 +320,7 @@ public sealed class XliffGraphProjectionTests
     {
         //XliffGraphProjection.cs:94: kills the mutant that replaces
         //`TurtleWriter.Write(Project(document, baseIri), output, TurtleSyntax.Turtle, TurtleOptions());` with `;`.
-        //TryRead fails immediately when the call is removed; the sibling's asynchronous read would hang.
+        //TryRead fails immediately when the call is removed; the sibling's asynchronous read has a deadline.
         XliffDocument document = Read(XliffReaderTests.WalletXliff);
         var pipe = new Pipe();
 
@@ -338,13 +338,27 @@ public sealed class XliffGraphProjectionTests
     {
         XliffDocument document = Read(XliffReaderTests.WalletXliff);
         var pipe = new Pipe();
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(10));
 
-        XliffGraphProjection.WriteTurtle(document, Base, pipe.Writer);
-        ReadResult result = await pipe.Reader.ReadAsync(TestContext.CancellationToken);
+        try
+        {
+            XliffGraphProjection.WriteTurtle(document, Base, pipe.Writer);
+            ReadResult result = await pipe.Reader.ReadAsync(deadline.Token);
 
-        Assert.IsTrue(result.IsCompleted);
-        Assert.AreEqual(Turtle(document), Encoding.UTF8.GetString(result.Buffer.ToArray()));
-        pipe.Reader.AdvanceTo(result.Buffer.End);
+            Assert.IsTrue(result.IsCompleted);
+            Assert.AreEqual(Turtle(document), Encoding.UTF8.GetString(result.Buffer.ToArray()));
+            pipe.Reader.AdvanceTo(result.Buffer.End);
+        }
+        catch(OperationCanceledException) when(deadline.IsCancellationRequested && !TestContext.CancellationToken.IsCancellationRequested)
+        {
+            Assert.Fail("Writing Turtle did not make the pipe buffer available within ten seconds.");
+        }
+        finally
+        {
+            await pipe.Reader.CompleteAsync();
+            await pipe.Writer.CompleteAsync();
+        }
     }
 
     [TestMethod]

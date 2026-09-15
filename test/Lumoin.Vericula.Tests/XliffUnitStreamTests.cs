@@ -45,12 +45,25 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public async Task StreamsUnitsAsynchronouslyFromAPipe()
     {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(10));
         PipeReader input = PipeReader.Create(new MemoryStream(Encoding.UTF8.GetBytes(NestedXliff)));
 
         List<string> ids = [];
-        await foreach(XliffUnit unit in XliffReader.ReadUnitsAsync(input, TestContext.CancellationToken))
+        try
         {
-            ids.Add(unit.Id);
+            await foreach(XliffUnit unit in XliffReader.ReadUnitsAsync(input, deadline.Token))
+            {
+                ids.Add(unit.Id);
+            }
+        }
+        catch(OperationCanceledException) when(deadline.IsCancellationRequested && !TestContext.CancellationToken.IsCancellationRequested)
+        {
+            Assert.Fail("Streaming units made no complete progress through the pipe within ten seconds.");
+        }
+        finally
+        {
+            await input.CompleteAsync();
         }
 
         CollectionAssert.AreEqual(ExpectedIds, ids);
@@ -177,6 +190,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public async Task StreamingAsyncRejectsMalformedXmlTruncatedBeforeAnyUnit()
     {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(10));
         //XliffReader.cs:435 AdvanceAsync's throw NotWellFormed(exception) was mutated to a no-op; the
         //async counterpart of StreamingRejectsMalformedXmlTruncatedBeforeAnyUnit, truncated before any
         //<unit> so the exception surfaces from AdvanceAsync's plain reader.ReadAsync() rather than from
@@ -186,7 +201,7 @@ public sealed class XliffUnitStreamTests
 
         async Task Enumerate()
         {
-            await foreach(XliffUnit unit in XliffReader.ReadUnitsAsync(stream, TestContext.CancellationToken))
+            await foreach(XliffUnit unit in XliffReader.ReadUnitsAsync(stream, deadline.Token))
             {
                 _ = unit;
             }
@@ -200,6 +215,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public async Task StreamingAsyncRejectsMalformedXmlTruncatedInsideAUnit()
     {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(10));
         //XliffReader.cs:469 ReadElementAsync's throw NotWellFormed(exception) was mutated to a no-op;
         //the async counterpart of StreamingRejectsMalformedXmlAsAFormatException, truncated inside the
         //<unit> so XNode.ReadFromAsync itself hits the malformed XML while materializing the unit element.
@@ -208,7 +225,7 @@ public sealed class XliffUnitStreamTests
 
         async Task Enumerate()
         {
-            await foreach(XliffUnit unit in XliffReader.ReadUnitsAsync(stream, TestContext.CancellationToken))
+            await foreach(XliffUnit unit in XliffReader.ReadUnitsAsync(stream, deadline.Token))
             {
                 _ = unit;
             }
@@ -658,6 +675,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public async Task ReadUnitsAsyncFromAPipeAsksAsStreamToLeaveThePipeReaderOpen()
     {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(10));
         //XliffReader.cs:188 IterateUnitsFromPipeAsync's input.AsStream(leaveOpen: true) was mutated to
         //leaveOpen: false. Unlike ReadUnits(PipeReader), ReadUnitsAsync(PipeReader) is itself an async
         //iterator, so the AsStream call is lazy; starting enumeration once already runs it, before any
@@ -666,7 +685,7 @@ public sealed class XliffUnitStreamTests
         PipeReader inner = PipeReader.Create(innerStream);
         var spy = new LeaveOpenRecordingPipeReader(inner);
 
-        await using IAsyncEnumerator<XliffUnit> enumerator = XliffReader.ReadUnitsAsync(spy, TestContext.CancellationToken).GetAsyncEnumerator();
+        await using IAsyncEnumerator<XliffUnit> enumerator = XliffReader.ReadUnitsAsync(spy, deadline.Token).GetAsyncEnumerator();
         await enumerator.MoveNextAsync();
 
         Assert.AreEqual(true, spy.CapturedLeaveOpen);
