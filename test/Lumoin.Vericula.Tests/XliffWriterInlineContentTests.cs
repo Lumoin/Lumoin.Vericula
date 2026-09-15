@@ -1412,13 +1412,74 @@ public sealed class XliffWriterInlineContentTests
         AssertUnitRejected(unit, "carries original data without a dataRef");
     }
 
+    /// <summary>Proves a paired span after text recurses over exactly its inner content.</summary>
+    [TestMethod]
+    public void WritesTheExactBytesOfAPairedSpanAfterText()
+    {
+        //T-014, XliffWriter.InlineContent.cs:96 (census line 84): index + 1 to index - 1
+        //re-enters this start until the depth invariant throws InvalidOperationException.
+        //The byte assertion requires successful serialization of exactly the text and paired span.
+        XliffUnit unit = UnitOf(new InlineTextPart("before"), PcStart("x"), new InlineTextPart("inside"), PcEnd("x"));
+
+        CollectionAssert.AreEqual(InlineDocumentBytes("before<pc id=\"x\">inside</pc>"), WriteToBytes(DocumentOf(unit)));
+    }
+
+    /// <summary>Proves a marker after text recurses over exactly its inner content.</summary>
+    [TestMethod]
+    public void WritesTheExactBytesOfAMarkerAfterText()
+    {
+        //T-019, XliffWriter.InlineContent.cs:124 (census line 112): index + 1 to index - 1
+        //re-enters this marker until the depth invariant throws InvalidOperationException.
+        //The byte assertion requires successful serialization of exactly the text and marker.
+        XliffUnit unit = UnitOf(new InlineTextPart("before"), Mrk("x"), new InlineTextPart("inside"), MrkEnd("x"));
+
+        CollectionAssert.AreEqual(InlineDocumentBytes("before<mrk id=\"x\">inside</mrk>"), WriteToBytes(DocumentOf(unit)));
+    }
+
+    /// <summary>Proves an empty paired code retains explicit start and end tags.</summary>
+    [TestMethod]
+    public void WritesAnEmptyPairedCodeWithExplicitStartAndEndTags()
+    {
+        //S-054, XliffWriter.InlineContent.cs:95 (census line 83): removing WriteString(string.Empty)
+        //lets the empty pc self-close; the exact bytes require <pc id="x"></pc>.
+        XliffUnit unit = UnitOf(PcStart("x"), PcEnd("x"));
+
+        CollectionAssert.AreEqual(InlineDocumentBytes("<pc id=\"x\"></pc>"), WriteToBytes(DocumentOf(unit)));
+    }
+
+    /// <summary>Proves an empty marker retains explicit start and end tags.</summary>
+    [TestMethod]
+    public void WritesAnEmptyMarkerWithExplicitStartAndEndTags()
+    {
+        //S-055, XliffWriter.InlineContent.cs:123 (census line 111): removing WriteString(string.Empty)
+        //lets the empty mrk self-close; the exact bytes require <mrk id="x"></mrk>.
+        XliffUnit unit = UnitOf(Mrk("x"), MrkEnd("x"));
+
+        CollectionAssert.AreEqual(InlineDocumentBytes("<mrk id=\"x\"></mrk>"), WriteToBytes(DocumentOf(unit)));
+    }
+
+    /// <summary>Builds the exact expected UTF-8 document bytes for one inline source.</summary>
+    private static byte[] InlineDocumentBytes(string source) => Encoding.UTF8.GetBytes($"""
+        <?xml version="1.0" encoding="utf-8"?>
+        <xliff version="2.1" srcLang="en" trgLang="fi" xml:space="preserve" xmlns="urn:oasis:names:tc:xliff:document:2.0">
+          <file id="f">
+            <unit id="u">
+              <segment>
+                <source>{source}</source>
+              </segment>
+            </unit>
+          </file>
+        </xliff>
+        """);
+
+    /// <summary>Proves each inline part advances and recursive spans finish within the bound.</summary>
     [TestMethod]
     public void WritesEveryPartKindWithoutHangingOnAMissingIndexAdvance()
     {
-        //Kills XliffWriter.InlineContent.cs:57,65,73,84,94,102,112,122 (WriteContentParts): removing
-        //or flipping the index advance for any part kind leaves the loop unable to progress past it,
-        //hanging instead of completing; Stryker's own timeout already flags these as detected, but
-        //nothing before this turned that into a fast, named, deterministic assertion.
+        //The five-second assertion bounds missing loop advances at census lines 57,65,73,94,102,122.
+        //T-014/T-019, XliffWriter.InlineContent.cs:96/124 (census 84/112), change index + 1 to
+        //index - 1 in recursion. The depth invariant now throws a named InvalidOperationException,
+        //which faults this task; a timed task wait alone could not contain the former stack overflow.
         XliffUnit unit = UnitOf(
             new InlineTextPart("a"),
             Ph("1"),

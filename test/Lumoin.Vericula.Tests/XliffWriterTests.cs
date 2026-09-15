@@ -1743,6 +1743,64 @@ public sealed class XliffWriterTests
         Assert.AreEqual(0, recorder.PostCount, "The writer must not post its continuation to the caller's context.");
     }
 
+    /// <summary>Proves asynchronous pipe completion does not capture the caller's context.</summary>
+    [TestMethod]
+    public async Task WriteAsyncCompletesAPipeWithoutPostingToTheCallersContext()
+    {
+        //S-120, XliffWriter.cs:89: ConfigureAwait(false) to true posts the completion continuation.
+        //Writes and flushes complete synchronously, so the first suspension is CompleteAsync.
+        //The helper observes suspension, releases completion, and asserts PostCount is exactly zero.
+        var document = new XliffDocument(XliffVersion.V21, [NewFile("f", "en", null, [], [NewUnit("u", "text")])]);
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var writer = new CompletionGatedPipeWriter(gate.Task);
+
+        await AssertResumesWithoutPostingToTheCallersContext(
+            () => XliffWriter.WriteAsync(document, writer, TestContext.CancellationToken),
+            gate.SetResult, TestContext.CancellationToken);
+    }
+
+    /// <summary>Completes writes synchronously and suspends only asynchronous completion.</summary>
+    private sealed class CompletionGatedPipeWriter : PipeWriter
+    {
+        /// <summary>Stores synchronously supplied bytes.</summary>
+        private readonly ArrayBufferWriter<byte> buffer = new();
+
+        /// <summary>Controls the only incomplete operation exposed by this writer.</summary>
+        private readonly Task completionGate;
+
+        /// <summary>Creates a writer that completes when the supplied gate is released.</summary>
+        public CompletionGatedPipeWriter(Task completionGate)
+        {
+            this.completionGate = completionGate;
+        }
+
+        /// <summary>Commits bytes synchronously.</summary>
+        public override void Advance(int bytes) => buffer.Advance(bytes);
+
+        /// <summary>Provides memory synchronously to the base write implementation.</summary>
+        public override Memory<byte> GetMemory(int sizeHint = 0) => buffer.GetMemory(sizeHint);
+
+        /// <summary>Provides writable space synchronously.</summary>
+        public override Span<byte> GetSpan(int sizeHint = 0) => buffer.GetSpan(sizeHint);
+
+        /// <summary>Has no pending flush to cancel.</summary>
+        public override void CancelPendingFlush()
+        {
+        }
+
+        /// <summary>Has no external resources to release on synchronous completion.</summary>
+        public override void Complete(Exception? exception = null)
+        {
+        }
+
+        /// <summary>Completes the flush synchronously so it cannot capture a context.</summary>
+        public override ValueTask<FlushResult> FlushAsync(CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(default(FlushResult));
+
+        /// <summary>Suspends completion until the test releases its gate.</summary>
+        public override ValueTask CompleteAsync(Exception? exception = null) => new(completionGate);
+    }
+
     /// <summary>Buffers a pipe write and keeps its flush suspended until the test releases a gate.</summary>
     private sealed class GatedPipeWriter : PipeWriter
     {

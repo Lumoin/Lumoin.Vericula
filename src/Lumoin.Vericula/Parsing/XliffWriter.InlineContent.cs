@@ -36,7 +36,7 @@ public static partial class XliffWriter
     {
         writer.WriteStartElement(elementName);
         writer.WriteString(string.Empty);
-        WriteContentParts(writer, parts, 0, parts.Length);
+        WriteContentParts(writer, parts, 0, parts.Length, 0);
         writer.WriteEndElement();
     }
 
@@ -49,10 +49,16 @@ public static partial class XliffWriter
     /// <see cref="FindMatchingMarkerEnd"/> and recursed into. This assumes the content already passed
     /// the unit's problems: every <c>Paired</c> start and <c>Marker</c> start has its matching end
     /// properly nested within <paramref name="endExclusive"/>, so the two lookups always succeed and a
-    /// bare <c>Paired</c>/<c>Marker</c> end is never reached by the loop itself.
+    /// bare <c>Paired</c>/<c>Marker</c> end is never reached by the loop itself. The recursion
+    /// <paramref name="depth"/> cannot exceed <see cref="MaxInlineNestingDepth"/> after validation.
     /// </summary>
-    private static void WriteContentParts(XmlWriter writer, ImmutableArray<InlinePart> parts, int index, int endExclusive)
+    private static void WriteContentParts(XmlWriter writer, ImmutableArray<InlinePart> parts, int index, int endExclusive, int depth)
     {
+        if(depth > MaxInlineNestingDepth)
+        {
+            throw new InvalidOperationException("Inline content exceeds the maximum nesting depth; the document must be validated before writing.");
+        }
+
         while(index < endExclusive)
         {
             switch(parts[index])
@@ -87,7 +93,7 @@ public static partial class XliffWriter
                     var pairedEnd = (EndCodePart)parts[endIndex];
                     WritePairedCodeStart(writer, pairedStart, pairedEnd);
                     writer.WriteString(string.Empty);
-                    WriteContentParts(writer, parts, index + 1, endIndex);
+                    WriteContentParts(writer, parts, index + 1, endIndex, depth + 1);
                     writer.WriteEndElement();
                     index = endIndex + 1;
 
@@ -115,7 +121,7 @@ public static partial class XliffWriter
                     int endIndex = FindMatchingMarkerEnd(parts, index);
                     WriteMarkerStart(writer, markerStart);
                     writer.WriteString(string.Empty);
-                    WriteContentParts(writer, parts, index + 1, endIndex);
+                    WriteContentParts(writer, parts, index + 1, endIndex, depth + 1);
                     writer.WriteEndElement();
                     index = endIndex + 1;
 
