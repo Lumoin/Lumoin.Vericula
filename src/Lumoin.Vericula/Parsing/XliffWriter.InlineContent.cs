@@ -15,6 +15,12 @@ namespace Lumoin.Vericula.Parsing;
 public static partial class XliffWriter
 {
     /// <summary>
+    /// Limits combined Paired code and Marker annotation nesting to 64 levels, matching the reader's
+    /// MaxGroupDepth choice so accepted models keep recursive serialization safely bounded.
+    /// </summary>
+    private const int MaxInlineNestingDepth = 64;
+
+    /// <summary>
     /// Writes a <c>&lt;source&gt;</c> or <c>&lt;target&gt;</c> element in mixed-content mode: an empty
     /// string is written immediately after the start tag (<see cref="XmlWriter.WriteString(string)"/>
     /// with <see cref="string.Empty"/> reaches the raw writer and switches it to mixed content) so the
@@ -689,8 +695,17 @@ public static partial class XliffWriter
     private static IEnumerable<string> ContentNestingProblems(ImmutableArray<InlinePart> parts, string what)
     {
         var stack = new Stack<InlinePart>();
-        foreach(InlinePart part in parts)
+        for(int index = 0; index < parts.Length; index++)
         {
+            InlinePart part = parts[index];
+            if(stack.Count == MaxInlineNestingDepth
+                && part is StartCodePart { Form: SpanForm.Paired } or AnnotationStartPart { Form: AnnotationForm.Marker })
+            {
+                yield return $"The inline part at position {index.ToString(CultureInfo.InvariantCulture)} in {what} exceeds the maximum inline nesting depth of {MaxInlineNestingDepth.ToString(CultureInfo.InvariantCulture)}.";
+
+                yield break;
+            }
+
             switch(part)
             {
                 case(StartCodePart start) when start.Form == SpanForm.Paired:
@@ -936,8 +951,27 @@ public static partial class XliffWriter
     /// </summary>
     private static IEnumerable<string> InlinePartFieldProblems(ImmutableArray<InlinePart> parts, string what)
     {
-        foreach(InlinePart part in parts)
+        for(int index = 0; index < parts.Length; index++)
         {
+            InlinePart part = parts[index];
+            int? undefinedForm = part switch
+            {
+                StartCodePart start when !Enum.IsDefined(start.Form) => (int)start.Form,
+                EndCodePart end when !Enum.IsDefined(end.Form) => (int)end.Form,
+                AnnotationStartPart start when !Enum.IsDefined(start.Form) => (int)start.Form,
+                AnnotationEndPart end when !Enum.IsDefined(end.Form) => (int)end.Form,
+                _ => null
+            };
+            if(undefinedForm is { } value)
+            {
+                yield return $"The inline part of type '{part.GetType().Name}' at position {index.ToString(CultureInfo.InvariantCulture)} in {what} has undefined Form value {value.ToString(CultureInfo.InvariantCulture)}.";
+            }
+
+            if(part is not (InlineTextPart or PlaceholderPart or StartCodePart or EndCodePart or AnnotationStartPart or AnnotationEndPart))
+            {
+                yield return $"The inline part of type '{part.GetType().FullName}' at position {index.ToString(CultureInfo.InvariantCulture)} in {what} is of a kind the writer cannot serialize.";
+            }
+
             switch(part)
             {
                 case(PlaceholderPart placeholder):

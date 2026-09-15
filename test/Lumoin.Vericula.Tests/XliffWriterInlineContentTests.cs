@@ -554,6 +554,106 @@ public sealed class XliffWriterInlineContentTests
 
     //---- Problems(): pairing and nesting ------------------------------------------------------------
 
+    /// <summary>Proves an undefined start-code form is reported with its position before output.</summary>
+    [TestMethod]
+    public void RejectsAnUndefinedStartCodeFormBeforeWriting()
+    {
+        AssertInvalidPartRejected(Sc("x") with { Form = (SpanForm)99 },
+            "The inline part of type 'StartCodePart' at position 1 in the source of unit 'u' has undefined Form value 99.");
+    }
+
+    /// <summary>Proves an undefined end-code form is reported with its position before output.</summary>
+    [TestMethod]
+    public void RejectsAnUndefinedEndCodeFormBeforeWriting()
+    {
+        AssertInvalidPartRejected(Ec("x") with { Form = (SpanForm)99 },
+            "The inline part of type 'EndCodePart' at position 1 in the source of unit 'u' has undefined Form value 99.");
+    }
+
+    /// <summary>Proves an undefined annotation-start form is reported with its position before output.</summary>
+    [TestMethod]
+    public void RejectsAnUndefinedAnnotationStartFormBeforeWriting()
+    {
+        AssertInvalidPartRejected(Mrk("x") with { Form = (AnnotationForm)99 },
+            "The inline part of type 'AnnotationStartPart' at position 1 in the source of unit 'u' has undefined Form value 99.");
+    }
+
+    /// <summary>Proves an undefined annotation-end form is reported with its position before output.</summary>
+    [TestMethod]
+    public void RejectsAnUndefinedAnnotationEndFormBeforeWriting()
+    {
+        AssertInvalidPartRejected(MrkEnd("x") with { Form = (AnnotationForm)99 },
+            "The inline part of type 'AnnotationEndPart' at position 1 in the source of unit 'u' has undefined Form value 99.");
+    }
+
+    /// <summary>Represents a public extension of the model that has no XLIFF serialization.</summary>
+    private sealed record UnsupportedInlinePart : InlinePart;
+
+    /// <summary>Proves unsupported part kinds are named and refused before output.</summary>
+    [TestMethod]
+    public void RejectsAnUnsupportedInlinePartBeforeWriting()
+    {
+        AssertInvalidPartRejected(new UnsupportedInlinePart(),
+            $"The inline part of type '{typeof(UnsupportedInlinePart).FullName}' at position 1 in the source of unit 'u' is of a kind the writer cannot serialize.");
+    }
+
+    /// <summary>Checks the reported problem and the no-output refusal for a part after text.</summary>
+    private static void AssertInvalidPartRejected(InlinePart part, string expectedProblem)
+    {
+        XliffUnit unit = UnitOf(new InlineTextPart("before"), part);
+
+        AssertUnitRejected(unit, expectedProblem);
+    }
+
+    /// <summary>Proves paired codes, markers and their combined nesting refuse the sixty-fifth level.</summary>
+    [TestMethod]
+    [DataRow(true, false)]
+    [DataRow(false, true)]
+    [DataRow(true, true)]
+    public void RejectsInlineNestingDeeperThan64LevelsBeforeWriting(bool codes, bool markers)
+    {
+        XliffUnit unit = UnitWithNestedSpans(65, codes, markers);
+        const string expectedProblem = "The inline part at position 64 in the source of unit 'u' exceeds the maximum inline nesting depth of 64.";
+
+        AssertUnitRejected(unit, expectedProblem);
+    }
+
+    /// <summary>Proves the maximum accepted depth remains writable for each kind and mixed nesting.</summary>
+    [TestMethod]
+    [DataRow(true, false)]
+    [DataRow(false, true)]
+    [DataRow(true, true)]
+    public void AllowsInlineNestingExactlyAt64Levels(bool codes, bool markers)
+    {
+        XliffUnit unit = UnitWithNestedSpans(64, codes, markers);
+
+        AssertUnitsEqual(unit, Read(WriteToBytes(DocumentOf(unit))).Files[0].Units[0]);
+    }
+
+    /// <summary>Builds properly nested paired codes, markers, or alternating codes and markers.</summary>
+    private static XliffUnit UnitWithNestedSpans(int depth, bool codes, bool markers)
+    {
+        var parts = new InlinePart[(depth * 2) + 1];
+        for(int index = 0; index < depth; index++)
+        {
+            string id = $"span{index}";
+            bool code = codes && (!markers || index % 2 == 0);
+            parts[index] = code ? PcStart(id) : Mrk(id);
+            parts[parts.Length - index - 1] = code ? PcEnd(id) : MrkEnd(id);
+        }
+
+        parts[depth] = new InlineTextPart("inside");
+
+        return UnitOf(parts);
+    }
+
+    /// <summary>Proves a marker must close in the same content before serialization can search for its end.</summary>
+    [TestMethod]
+    public void RejectsAMarkerStartWithoutAMatchingEndInTheSameContent()
+    {
+        AssertUnitRejected(UnitOf(Mrk("x"), new InlineTextPart("inside")), "has no closing end in the same content");
+    }
+
     [TestMethod]
     public void RejectsAPairedStartWithoutAMatchingEndInTheSameContent()
     {
