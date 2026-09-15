@@ -312,6 +312,27 @@ public sealed class XliffGraphProjectionTests
         Assert.IsTrue(first.Contains("\"Home\"@en", StringComparison.Ordinal), first);
     }
 
+    /// <summary>
+    /// Verifies that writing Turtle publishes the complete pipe buffer before returning.
+    /// </summary>
+    [TestMethod]
+    public void WritingTurtleToAPipeMakesTheBufferAvailableSynchronouslyWithoutAwaitingARead()
+    {
+        //XliffGraphProjection.cs:94: kills the mutant that replaces
+        //`TurtleWriter.Write(Project(document, baseIri), output, TurtleSyntax.Turtle, TurtleOptions());` with `;`.
+        //TryRead fails immediately when the call is removed; the sibling's asynchronous read would hang.
+        XliffDocument document = Read(XliffReaderTests.WalletXliff);
+        var pipe = new Pipe();
+
+        XliffGraphProjection.WriteTurtle(document, Base, pipe.Writer);
+        bool hasResult = pipe.Reader.TryRead(out ReadResult result);
+
+        Assert.IsTrue(hasResult);
+        Assert.IsTrue(result.IsCompleted);
+        Assert.AreEqual(Turtle(document), Encoding.UTF8.GetString(result.Buffer.ToArray()));
+        pipe.Reader.AdvanceTo(result.Buffer.End);
+    }
+
     [TestMethod]
     public async Task WritesTurtleToAPipeAndCompletesIt()
     {
