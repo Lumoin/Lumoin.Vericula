@@ -305,12 +305,12 @@ public static partial class XliffReader
         {
             if(core && WellKnownXliffElements.IsFile(name))
             {
-                if(state.FileMembers == 0)
+                if(!state.HasMembers)
                 {
                     throw new XliffFormatException($"File '{state.CurrentFileId}' has no <unit> or <group> element; XLIFF 2.1 §4.2.2.2 requires at least one.");
                 }
 
-                return (StreamStep.Advance, state with { InFile = false, CurrentFileId = null, FileMembers = 0 });
+                return (StreamStep.Advance, state with { InFile = false, CurrentFileId = null });
             }
 
             if(core && WellKnownXliffElements.IsGroup(name))
@@ -363,6 +363,15 @@ public static partial class XliffReader
                 throw new XliffFormatException($"Duplicate file id '{fileId}'. File ids must be unique within the document.");
             }
 
+            state = state with
+            {
+                InFile = true,
+                FileIds = state.FileIds.Add(fileId),
+                Seen = ImmutableHashSet.Create<string>(StringComparer.Ordinal),
+                CurrentFileId = fileId,
+                HasMembers = false
+            };
+
             //a self-closing <file/> never raises a separate EndElement node, so the empty check that
             //</file> otherwise applies has to run here too.
             if(reader.IsEmptyElement)
@@ -370,14 +379,7 @@ public static partial class XliffReader
                 throw new XliffFormatException($"File '{fileId}' has no <unit> or <group> element; XLIFF 2.1 §4.2.2.2 requires at least one.");
             }
 
-            return (StreamStep.Advance, state with
-            {
-                InFile = true,
-                FileIds = state.FileIds.Add(fileId),
-                Seen = ImmutableHashSet.Create<string>(StringComparer.Ordinal),
-                CurrentFileId = fileId,
-                FileMembers = 0
-            });
+            return (StreamStep.Advance, state);
         }
 
         if(WellKnownXliffElements.IsGroup(name))
@@ -391,7 +393,7 @@ public static partial class XliffReader
 
             state = state with
             {
-                FileMembers = state.OpenGroups == 0 ? state.FileMembers + 1 : state.FileMembers
+                HasMembers = state.OpenGroups == 0 ? true : state.HasMembers
             };
 
             //a self-closing <group/> counts as a member but never raises an EndElement node.
@@ -410,7 +412,7 @@ public static partial class XliffReader
                 throw new XliffFormatException("A <unit> element is not inside a <file>; XLIFF 2.1 §4.2.2.1 allows only <file> children directly under <xliff>.");
             }
 
-            return (StreamStep.TakeUnit, state.OpenGroups == 0 ? state with { FileMembers = state.FileMembers + 1 } : state);
+            return (StreamStep.TakeUnit, state.OpenGroups == 0 ? state with { HasMembers = true } : state);
         }
 
         if(!state.InFile)
@@ -1711,7 +1713,7 @@ public static partial class XliffReader
     /// <param name="FileIds">The file ids seen so far in the document.</param>
     /// <param name="Seen">The unit ids seen so far in the current file.</param>
     /// <param name="CurrentFileId">The id of the &lt;file&gt; currently open, or null when none is.</param>
-    /// <param name="FileMembers">How many &lt;unit&gt; or &lt;group&gt; elements have been seen as direct children of the current file.</param>
+    /// <param name="HasMembers">Whether a &lt;unit&gt; or &lt;group&gt; has been seen as a direct child of the current file.</param>
     private sealed record StreamState(
         bool RootSeen,
         string? TargetLanguage,
@@ -1720,7 +1722,7 @@ public static partial class XliffReader
         ImmutableHashSet<string> FileIds,
         ImmutableHashSet<string> Seen,
         string? CurrentFileId,
-        int FileMembers)
+        bool HasMembers)
     {
         /// <summary>The state before any node has been inspected.</summary>
         public static StreamState Start { get; } = new(
@@ -1731,7 +1733,7 @@ public static partial class XliffReader
             ImmutableHashSet.Create<string>(StringComparer.Ordinal),
             ImmutableHashSet.Create<string>(StringComparer.Ordinal),
             null,
-            0);
+            false);
     }
 
     /// <summary>

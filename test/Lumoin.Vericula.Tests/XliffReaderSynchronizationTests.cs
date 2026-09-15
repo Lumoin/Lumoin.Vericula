@@ -20,7 +20,7 @@ public sealed class XliffReaderSynchronizationTests
     [TestMethod]
     public async Task ReadAsyncFromAPipeDoesNotPostToTheCallersContext()
     {
-        //S-037 at XliffReader.cs:112 and S-048 at line 585 change false to true.
+        //S-037 at XliffReader.cs:112 and S-048 at line 594 change false to true.
         //Both awaits are pending at the first read; the zero-post assertion sees their capture.
         await AssertResumesWithoutPostingToTheCallersContext(pipe: true, streaming: false, insideUnit: false);
     }
@@ -30,7 +30,7 @@ public sealed class XliffReaderSynchronizationTests
     [TestMethod]
     public async Task ReadAsyncFromAStreamDoesNotPostToTheCallersContext()
     {
-        //S-038 at XliffReader.cs:141 and S-048 at line 585 change false to true.
+        //S-038 at XliffReader.cs:141 and S-048 at line 594 change false to true.
         //The gated initial read leaves both awaits pending; any captured continuation adds a post.
         await AssertResumesWithoutPostingToTheCallersContext(pipe: false, streaming: false, insideUnit: false);
     }
@@ -39,12 +39,12 @@ public sealed class XliffReaderSynchronizationTests
     [TestMethod]
     public async Task PrimingUnitsFromAPipeDoesNotPostToTheCallersContext()
     {
-        //T-004 at XliffReader.cs:283, T-007 at line 479 and T-008 at line 483 can stop
+        //T-004 at XliffReader.cs:283, T-007 at line 488 and T-008 at line 492 can stop
         //asynchronous progress. Fail by name after ten seconds and abandon a spinning worker;
         //the existing assertions still execute unchanged inside the deadline.
         await ReaderDeadline.RunAsync(async () =>
         {
-            //S-039 at XliffReader.cs:205, S-042 at line 283 and S-046 at line 479
+            //S-039 at XliffReader.cs:205, S-042 at line 283 and S-046 at line 488
             //change false to true. Priming suspends with each await under the caller context; posts expose it.
             await AssertResumesWithoutPostingToTheCallersContext(pipe: true, streaming: true, insideUnit: false);
         }, TestContext.CancellationToken);
@@ -54,12 +54,12 @@ public sealed class XliffReaderSynchronizationTests
     [TestMethod]
     public async Task PrimingUnitsFromAStreamDoesNotPostToTheCallersContext()
     {
-        //T-004 at XliffReader.cs:283, T-007 at line 479 and T-008 at line 483 can stop
+        //T-004 at XliffReader.cs:283, T-007 at line 488 and T-008 at line 492 can stop
         //asynchronous progress. Fail by name after ten seconds and abandon a spinning worker;
         //the existing assertions still execute unchanged inside the deadline.
         await ReaderDeadline.RunAsync(async () =>
         {
-            //S-042 at XliffReader.cs:283 and S-046 at line 479 change false to true.
+            //S-042 at XliffReader.cs:283 and S-046 at line 488 change false to true.
             //The first advance suspends under the caller context, making the post-count assertion sensitive.
             await AssertResumesWithoutPostingToTheCallersContext(pipe: false, streaming: true, insideUnit: false);
         }, TestContext.CancellationToken);
@@ -69,12 +69,12 @@ public sealed class XliffReaderSynchronizationTests
     [TestMethod]
     public async Task ReadingAUnitFromAPipeDoesNotPostToTheCallersContext()
     {
-        //T-004 at XliffReader.cs:283, T-007 at line 479 and T-008 at line 483 can stop
+        //T-004 at XliffReader.cs:283, T-007 at line 488 and T-008 at line 492 can stop
         //asynchronous progress. Fail by name after ten seconds and abandon a spinning worker;
         //the existing assertions still execute unchanged inside the deadline.
         await ReaderDeadline.RunAsync(async () =>
         {
-            //S-041 at XliffReader.cs:277 and S-047 at line 513 change false to true.
+            //S-041 at XliffReader.cs:277 and S-047 at line 522 change false to true.
             //Synchronous priming preserves the caller context until the unit read suspends; posts expose capture.
             await AssertResumesWithoutPostingToTheCallersContext(pipe: true, streaming: true, insideUnit: true);
         }, TestContext.CancellationToken);
@@ -84,12 +84,12 @@ public sealed class XliffReaderSynchronizationTests
     [TestMethod]
     public async Task ReadingAUnitFromAStreamDoesNotPostToTheCallersContext()
     {
-        //T-004 at XliffReader.cs:283, T-007 at line 479 and T-008 at line 483 can stop
+        //T-004 at XliffReader.cs:283, T-007 at line 488 and T-008 at line 492 can stop
         //asynchronous progress. Fail by name after ten seconds and abandon a spinning worker;
         //the existing assertions still execute unchanged inside the deadline.
         await ReaderDeadline.RunAsync(async () =>
         {
-            //S-041 at XliffReader.cs:277 and S-047 at line 513 change false to true.
+            //S-041 at XliffReader.cs:277 and S-047 at line 522 change false to true.
             //The first suspension is inside the unit, so both pending awaits can capture the caller context.
             await AssertResumesWithoutPostingToTheCallersContext(pipe: false, streaming: true, insideUnit: true);
         }, TestContext.CancellationToken);

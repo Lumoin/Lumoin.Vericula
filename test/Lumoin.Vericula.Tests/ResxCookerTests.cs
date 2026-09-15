@@ -433,16 +433,14 @@ public sealed class ResxCookerTests
         Assert.AreEqual("In nested group", neutral["InNestedGroup"]);
     }
 
+    /// <summary>Cooks a base name whose trailing segment is not a predefined culture.</summary>
     [TestMethod]
     public void BaseNameWhoseTrailingSegmentIsNotACultureCooksWithoutThrowing()
     {
-        //ResxCooker.cs:169, CultureInfo.GetCultureInfo(value); => ; and ResxCooker.cs:175, return
-        //false; => return true; both make IsCulture report every non-empty trailing segment as a
-        //culture. A base name ending in an unregistered word like "notaculture" must still cook
-        //without throwing under the correct code, since CultureInfo.GetCultureInfo rejects it and the
-        //catch block returns false. On ICU (Linux, macOS), GetCultureInfo("notaculture") succeeds
-        //unless predefinedOnly is true, so dropping that flag from IsCulture brings the failure back
-        //on Linux and macOS while Windows (NLS, which already rejects the name) stays green.
+        //S-010 at ResxCooker.cs:217 changes predefinedOnly: true to false. On ICU the unknown
+        //culture then passes IsCulture, so cooking Wallet.notaculture throws before the file assertion.
+        //The kill is observable on ICU only: the supplied Linux proof had one named failure among
+        //1295 tests. It is unobservable on NLS, which rejects the unknown culture with either flag.
         ImmutableArrayLike resources = Cook(new ResxCookOptions { BaseName = "Wallet.notaculture" }, EnFi);
 
         CollectionAssert.Contains(resources.FileNames, "Wallet.notaculture.resx");

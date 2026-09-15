@@ -973,7 +973,7 @@ public sealed class XliffModuleReaderTests
             }
         }
 
-        //T-004 at XliffReader.cs:283 and T-007 at line 479 remove the priming read. Start on
+        //T-004 at XliffReader.cs:283 and T-007 at line 488 remove the priming read. Start on
         //a worker so the mutant cannot prevent this caller reaching cancellation. A worker
         //that ignores cancellation is abandoned after the named ten-second deadline.
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);

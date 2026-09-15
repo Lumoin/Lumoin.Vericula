@@ -103,8 +103,8 @@ public sealed class XliffNestedFileTests
     [DataRow(1, true, true)]
     public void ReadUnitsRefusesAFileNestedOutsideAUnit(int depth, bool wrapInnerUnit, bool pipe)
     {
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove synchronous progress;
+        //T-006 at line 474 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
         ReaderDeadline.Run(() =>
         {
@@ -138,7 +138,7 @@ public sealed class XliffNestedFileTests
     [DataRow(1, true, true)]
     public async Task ReadUnitsAsyncRefusesAFileNestedOutsideAUnit(int depth, bool wrapInnerUnit, bool pipe)
     {
-        //T-004 at XliffReader.cs:283, T-007 at line 479 and T-008 at line 483 can stop
+        //T-004 at XliffReader.cs:283, T-007 at line 488 and T-008 at line 492 can stop
         //asynchronous progress. Fail by name after ten seconds and abandon a spinning worker;
         //the existing assertions still execute unchanged inside the deadline.
         await ReaderDeadline.RunAsync(async () =>

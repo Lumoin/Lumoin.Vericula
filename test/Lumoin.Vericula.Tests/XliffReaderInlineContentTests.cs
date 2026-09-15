@@ -43,8 +43,8 @@ public sealed class XliffReaderInlineContentTests
     {
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(Wrap(unitBody)));
 
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove the priming read; T-006 at
-        //line 465 can swallow a read error. Keep the exact exception assertion on a worker,
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove the priming read; T-006 at
+        //line 474 can swallow a read error. Keep the exact exception assertion on a worker,
         //abandoning a spin only after the named ten-second failure.
         return ReaderDeadline.Run(() => Assert.ThrowsExactly<XliffFormatException>(() => XliffReader.ReadUnits(stream).ToArray()), TestContext.CancellationToken);
     }
@@ -115,7 +115,7 @@ public sealed class XliffReaderInlineContentTests
     [TestMethod]
     public void TheStreamingPathAlsoRejectsAStartCodeWithoutAnId()
     {
-        //T-003 at XliffReader.cs:251, T-005 at line 461 and T-006 at line 465 can stop the
+        //T-003 at XliffReader.cs:251, T-005 at line 470 and T-006 at line 474 can stop the
         //streaming refusal below; its helper reports a named ten-second failure and abandons the worker.
         XliffFormatException exception = ReadUnitsExpectingFailure("""<segment><source><sc/></source></segment>""");
 
@@ -409,7 +409,7 @@ public sealed class XliffReaderInlineContentTests
     [TestMethod]
     public void TheStreamingPathAlsoRejectsANonIsolatedEndCodeThatCarriesAnId()
     {
-        //T-003 at XliffReader.cs:251, T-005 at line 461 and T-006 at line 465 can stop the
+        //T-003 at XliffReader.cs:251, T-005 at line 470 and T-006 at line 474 can stop the
         //streaming refusal below; its helper reports a named ten-second failure and abandons the worker.
         XliffFormatException exception = ReadUnitsExpectingFailure(
             """<segment><source><sc id="1"/>x<ec startRef="1" id="stray"/></source></segment>""");
@@ -575,7 +575,7 @@ public sealed class XliffReaderInlineContentTests
     [TestMethod]
     public void TheStreamingPathAlsoRejectsACommentAnnotationWithBothValueAndRef()
     {
-        //T-003 at XliffReader.cs:251, T-005 at line 461 and T-006 at line 465 can stop the
+        //T-003 at XliffReader.cs:251, T-005 at line 470 and T-006 at line 474 can stop the
         //streaming refusal below; its helper reports a named ten-second failure and abandons the worker.
         //Spot-checks that the already-satisfied (c) refusal (XliffReader.InlineContent.cs:606) fires
         //identically on the streaming path; it shares ParseUnit/ParseInlineContentRoot with the
@@ -605,7 +605,7 @@ public sealed class XliffReaderInlineContentTests
     [TestMethod]
     public void TheStreamingPathAlsoRejectsAnAnnotationTypeThatIsNeitherReservedNorShapedAsPrefixValue()
     {
-        //T-003 at XliffReader.cs:251, T-005 at line 461 and T-006 at line 465 can stop the
+        //T-003 at XliffReader.cs:251, T-005 at line 470 and T-006 at line 474 can stop the
         //streaming refusal below; its helper reports a named ten-second failure and abandons the worker.
         XliffFormatException exception = ReadUnitsExpectingFailure(
             """<segment><source><mrk id="m1" type="bogus">x</mrk></source></segment>""");
@@ -698,7 +698,7 @@ public sealed class XliffReaderInlineContentTests
     [TestMethod]
     public void TheStreamingPathAlsoRejectsACodePointWithoutTheRequiredHexAttribute()
     {
-        //T-003 at XliffReader.cs:251, T-005 at line 461 and T-006 at line 465 can stop the
+        //T-003 at XliffReader.cs:251, T-005 at line 470 and T-006 at line 474 can stop the
         //streaming refusal below; its helper reports a named ten-second failure and abandons the worker.
         XliffFormatException exception = ReadUnitsExpectingFailure("""<segment><source><cp/></source></segment>""");
 
@@ -896,7 +896,7 @@ public sealed class XliffReaderInlineContentTests
     [TestMethod]
     public void TheStreamingPathAlsoRejectsAnInvalidCanReorderValue()
     {
-        //T-003 at XliffReader.cs:251, T-005 at line 461 and T-006 at line 465 can stop the
+        //T-003 at XliffReader.cs:251, T-005 at line 470 and T-006 at line 474 can stop the
         //streaming refusal below; its helper reports a named ten-second failure and abandons the worker.
         XliffFormatException exception = ReadUnitsExpectingFailure("""<segment><source><ph id="1" canReorder="maybe"/></source></segment>""");
 
@@ -1235,8 +1235,8 @@ public sealed class XliffReaderInlineContentTests
     [TestMethod]
     public void TheStreamingPathParsesInlineContentTheSameWayAsTheWholeDocumentRead()
     {
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove synchronous progress;
+        //T-006 at line 474 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
         ReaderDeadline.Run(() =>
         {

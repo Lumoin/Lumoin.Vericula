@@ -36,12 +36,12 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public async Task StreamsUnitsInDocumentOrderFlatteningGroups()
     {
-        //SG-001 at XliffReader.cs:398 inverts the empty-element condition and skips paired-group
+        //SG-001 at XliffReader.cs:400 inverts the empty-element condition and skips paired-group
         //increments. Their end nodes then make OpenGroups negative, so later file members go uncounted.
         //Complete document-order enumeration observes the resulting empty-file refusal.
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(NestedXliff));
 
-        //T-003 at XliffReader.cs:251 removes Advance(reader); T-005 at line 461 removes reader.Read().
+        //T-003 at XliffReader.cs:251 removes Advance(reader); T-005 at line 470 removes reader.Read().
         //Either leaves the synchronous walk spinning before the first unit. The deadline fails by
         //name and abandons that worker; the document-order assertion remains unchanged.
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
@@ -65,9 +65,9 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public async Task StreamsUnitsAsynchronouslyFromAPipe()
     {
-        //SG-001 at XliffReader.cs:398 inverts the empty-element condition and skips paired-group
+        //SG-001 at XliffReader.cs:400 inverts the empty-element condition and skips paired-group
         //increments. The complete asynchronous document-order assertion observes the later file refusal.
-        //T-004 at XliffReader.cs:283 removes await AdvanceAsync; T-007 at line 479 removes
+        //T-004 at XliffReader.cs:283 removes await AdvanceAsync; T-007 at line 488 removes
         //await reader.ReadAsync. Either stops priming progress; the ten-second Assert.Fail
         //names that loss while the original document-order assertion remains intact.
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
@@ -98,8 +98,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void StreamedUnitsCarryTheirOwnSegmentsNotesAndMetadataButNotTheirGroupsScopes()
     {
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove synchronous progress;
+        //T-006 at line 474 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
         ReaderDeadline.Run(() =>
         {
@@ -122,8 +122,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void StreamingRejectsDuplicateUnitIdsWithinAFile()
     {
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove synchronous progress;
+        //T-006 at line 474 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
         ReaderDeadline.Run(() =>
         {
@@ -149,8 +149,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void StreamingRejectsTargetsWithoutATargetLanguage()
     {
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove synchronous progress;
+        //T-006 at line 474 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
         ReaderDeadline.Run(() =>
         {
@@ -175,8 +175,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void StreamingRejectsARootThatIsNotXliff()
     {
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove synchronous progress;
+        //T-006 at line 474 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
         ReaderDeadline.Run(() =>
         {
@@ -190,8 +190,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void StreamingRejectsARootInTheCoreNamespaceButNotNamedXliff()
     {
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove synchronous progress;
+        //T-006 at line 474 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
         ReaderDeadline.Run(() =>
         {
@@ -212,8 +212,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void StreamingRejectsAMissingSourceLanguage()
     {
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove synchronous progress;
+        //T-006 at line 474 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
         ReaderDeadline.Run(() =>
         {
@@ -228,8 +228,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void StreamingRejectsAnUnsupportedVersion()
     {
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove synchronous progress;
+        //T-006 at line 474 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
         ReaderDeadline.Run(() =>
         {
@@ -244,8 +244,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void StreamingRejectsMalformedXmlAsAFormatException()
     {
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove synchronous progress;
+        //T-006 at line 474 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
         ReaderDeadline.Run(() =>
         {
@@ -259,7 +259,7 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public async Task StreamingRejectsMalformedXmlTruncatedBeforeAnyUnit()
     {
-        //T-006 at XliffReader.cs:465: Advance's throw NotWellFormed(exception) was mutated to a no-op. Truncating
+        //T-006 at XliffReader.cs:474: Advance's throw NotWellFormed(exception) was mutated to a no-op. Truncating
         //right after <file>, before any <unit> starts, means the malformed-XML exception surfaces from
         //Advance's plain reader.Read() rather than from ReadElement's XNode.ReadFrom, which
         //StreamingRejectsMalformedXmlAsAFormatException already covers.
@@ -288,7 +288,7 @@ public sealed class XliffUnitStreamTests
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
         deadline.CancelAfter(TimeSpan.FromSeconds(10));
-        //T-008 at XliffReader.cs:483: AdvanceAsync's throw NotWellFormed(exception) was mutated to a no-op; the
+        //T-008 at XliffReader.cs:492: AdvanceAsync's throw NotWellFormed(exception) was mutated to a no-op; the
         //async counterpart of StreamingRejectsMalformedXmlTruncatedBeforeAnyUnit, truncated before any
         //<unit> so the exception surfaces from AdvanceAsync's plain reader.ReadAsync() rather than from
         //ReadElementAsync's XNode.ReadFromAsync.
@@ -351,8 +351,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void StreamingYieldsNothingButStillRequiresARoot()
     {
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove synchronous progress;
+        //T-006 at line 474 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
         ReaderDeadline.Run(() =>
         {
@@ -374,8 +374,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void StreamingRejectsAFileWithoutAnId()
     {
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove synchronous progress;
+        //T-006 at line 474 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
         ReaderDeadline.Run(() =>
         {
@@ -396,8 +396,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void StreamingRejectsAGroupWithoutAnId()
     {
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove synchronous progress;
+        //T-006 at line 474 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
         ReaderDeadline.Run(() =>
         {
@@ -418,10 +418,10 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void StreamingRejectsValidationRulesOnAGroup()
     {
-        //SG-001 at XliffReader.cs:398 inverts the empty-element condition, leaving a paired group
+        //SG-001 at XliffReader.cs:400 inverts the empty-element condition, leaving a paired group
         //uncounted in OpenGroups. The required group-validation exception then disappears.
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove synchronous progress;
+        //T-006 at line 474 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
         ReaderDeadline.Run(() =>
         {
@@ -449,10 +449,10 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void StreamingRejectsValidationOnAGroupEvenAfterANonGroupCoreElementInsideIt()
     {
-        //SG-001 at XliffReader.cs:398 inverts the empty-element condition, leaving a paired group
+        //SG-001 at XliffReader.cs:400 inverts the empty-element condition, leaving a paired group
         //uncounted in OpenGroups. The required group-validation exception then disappears.
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove synchronous progress;
+        //T-006 at line 474 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
         ReaderDeadline.Run(() =>
         {
@@ -485,8 +485,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void StreamingKeepsFileValidationDistinctFromGroupValidationAcrossACompactUnitClose()
     {
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove synchronous progress;
+        //T-006 at line 474 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
         ReaderDeadline.Run(() =>
         {
@@ -511,8 +511,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public async Task StreamingAsyncKeepsFileValidationDistinctFromGroupValidationAcrossACompactUnitClose()
     {
-        //T-004 at XliffReader.cs:283 and T-007 at line 479 remove the priming read; T-008 at
-        //line 483 can swallow XML errors. The deadline names lost progress and abandons a spin
+        //T-004 at XliffReader.cs:283 and T-007 at line 488 remove the priming read; T-008 at
+        //line 492 can swallow XML errors. The deadline names lost progress and abandons a spin
         //without changing the validation and document-order assertions below.
         await ReaderDeadline.RunAsync(async () =>
         {
@@ -541,8 +541,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void StreamingSkipsElementsOutsideTheCoreNamespaceEvenWhenTheirLocalNameMatchesXliffElements()
     {
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove synchronous progress;
+        //T-006 at line 474 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
         ReaderDeadline.Run(() =>
         {
@@ -571,8 +571,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void StreamingAcceptsValidationRulesOnAFileOutsideAnyGroup()
     {
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove synchronous progress;
+        //T-006 at line 474 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
         ReaderDeadline.Run(() =>
         {
@@ -601,8 +601,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void StreamingAcceptsAFileWhoseOnlyDirectChildIsATopLevelGroup()
     {
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove synchronous progress;
+        //T-006 at line 474 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
         ReaderDeadline.Run(() =>
         {
@@ -630,8 +630,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void StreamingRejectsAUnitDirectlyUnderTheXliffRoot()
     {
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove synchronous progress;
+        //T-006 at line 474 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
         ReaderDeadline.Run(() =>
         {
@@ -657,8 +657,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void StreamingRejectsAUnitDirectlyUnderTheXliffRootAfterAPrecedingFileCloses()
     {
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove synchronous progress;
+        //T-006 at line 474 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
         ReaderDeadline.Run(() =>
         {
@@ -683,8 +683,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void StreamingRejectsAGroupDirectlyUnderTheXliffRootLikeTheWholeDocumentRead()
     {
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove synchronous progress;
+        //T-006 at line 474 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
         ReaderDeadline.Run(() =>
         {
@@ -713,8 +713,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void StreamingRejectsAnEmptySelfClosingFileLikeTheWholeDocumentRead()
     {
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove synchronous progress;
+        //T-006 at line 474 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
         ReaderDeadline.Run(() =>
         {
@@ -738,8 +738,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void StreamingRejectsAnEmptyPairedFileLikeTheWholeDocumentRead()
     {
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove synchronous progress;
+        //T-006 at line 474 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
         ReaderDeadline.Run(() =>
         {
@@ -766,8 +766,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void StreamingRejectsANonFileCoreElementUnderTheXliffRootLikeTheWholeDocumentRead()
     {
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove synchronous progress;
+        //T-006 at line 474 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
         ReaderDeadline.Run(() =>
         {
@@ -797,8 +797,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void StreamingRejectsDuplicateFileIds()
     {
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove synchronous progress;
+        //T-006 at line 474 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
         ReaderDeadline.Run(() =>
         {
@@ -824,8 +824,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void StreamingRejectsAMalformedTargetLanguage()
     {
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove synchronous progress;
+        //T-006 at line 474 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
         ReaderDeadline.Run(() =>
         {
@@ -845,8 +845,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void ThrowsForNullArguments()
     {
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
+        //T-003 at XliffReader.cs:251 and T-005 at line 470 remove synchronous progress;
+        //T-006 at line 474 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
         ReaderDeadline.Run(() =>
         {
@@ -924,7 +924,7 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public async Task ReadUnitsAsyncFromAPipeAsksAsStreamToLeaveThePipeReaderOpen()
     {
-        //T-004 at XliffReader.cs:283, T-007 at line 479 and T-008 at line 483 can stop
+        //T-004 at XliffReader.cs:283, T-007 at line 488 and T-008 at line 492 can stop
         //asynchronous progress. Fail by name after ten seconds and abandon a spinning worker;
         //the existing assertions still execute unchanged inside the deadline.
         await ReaderDeadline.RunAsync(async () =>
@@ -995,7 +995,7 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void ASelfClosingGroupAllowsTheFollowingUnitInTheSameFile()
     {
-        //SG-001 inverts XliffReader.cs:398's empty-element condition; SG-002 removes its branch.
+        //SG-001 inverts XliffReader.cs:400's empty-element condition; SG-002 removes its branch.
         //Both reopen a self-closing group without a matching end node.
         //The id assertion preserves same-file streaming alongside the cross-file killers.
         ReaderDeadline.Run(() =>
@@ -1017,7 +1017,7 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public async Task ASelfClosingGroupAllowsTheFollowingUnitInTheSameFileAsynchronously()
     {
-        //SG-001 inverts XliffReader.cs:398's empty-element condition; SG-002 removes its branch.
+        //SG-001 inverts XliffReader.cs:400's empty-element condition; SG-002 removes its branch.
         //Both reopen a self-closing group without a matching end node.
         //The id assertion preserves same-file streaming alongside the cross-file killers.
         await ReaderDeadline.RunAsync(async () =>
@@ -1046,11 +1046,37 @@ public sealed class XliffUnitStreamTests
         }, TestContext.CancellationToken);
     }
 
+    /// <summary>Refuses an empty second file even when the preceding file has a member.</summary>
+    [TestMethod]
+    public void StreamingRejectsAnEmptyFileAfterAFileWithMembers()
+    {
+        //FM-001 at XliffReader.cs:372 removes the HasMembers reset at file start.
+        //The first file sets the flag; the exact exception assertion sees an empty second file
+        //being accepted when the flag leaks across the file boundary.
+        ReaderDeadline.Run(() =>
+        {
+            const string xliff = """
+                <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.1" srcLang="en">
+                  <file id="first"><unit id="A"><segment><source>Home</source></segment></unit></file>
+                  <file id="second"></file>
+                </xliff>
+                """;
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xliff));
+
+            XliffFormatException exception = Assert.ThrowsExactly<XliffFormatException>(
+                () => XliffReader.ReadUnits(stream).ToArray());
+
+            Assert.Contains("File 'second' has no <unit> or <group> element", exception.Message, StringComparison.Ordinal);
+        }, TestContext.CancellationToken);
+    }
+
     /// <summary>Streams both files completely after a self-closing group.</summary>
     [TestMethod]
     public void ASelfClosingGroupAllowsUnitsInTheFollowingFile()
     {
-        //SG-001 inverts XliffReader.cs:398's empty-element condition; SG-002 removes its branch.
+        //FM-002 at XliffReader.cs:415 removes the unit branch's HasMembers assignment.
+        //The second file has only a unit, so complete enumeration throws before the id assertion.
+        //SG-001 inverts XliffReader.cs:400's empty-element condition; SG-002 removes its branch.
         //Both reopen a self-closing group without a matching end node.
         //The leaked OpenGroups makes complete enumeration throw before the id assertion.
         ReaderDeadline.Run(() =>
@@ -1072,7 +1098,7 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public async Task ASelfClosingGroupAllowsUnitsInTheFollowingFileAsynchronously()
     {
-        //SG-001 inverts XliffReader.cs:398's empty-element condition; SG-002 removes its branch.
+        //SG-001 inverts XliffReader.cs:400's empty-element condition; SG-002 removes its branch.
         //Both reopen a self-closing group without a matching end node.
         //The leaked OpenGroups makes complete enumeration throw before the id assertion.
         await ReaderDeadline.RunAsync(async () =>
@@ -1105,7 +1131,7 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void ASelfClosingGroupAllowsFollowingFileLevelValidation()
     {
-        //SG-001 inverts XliffReader.cs:398's empty-element condition; SG-002 removes its branch.
+        //SG-001 inverts XliffReader.cs:400's empty-element condition; SG-002 removes its branch.
         //Both reopen a self-closing group without a matching end node.
         //The leaked OpenGroups makes complete enumeration throw before the id assertion.
         ReaderDeadline.Run(() =>
@@ -1127,7 +1153,7 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public async Task ASelfClosingGroupAllowsFollowingFileLevelValidationAsynchronously()
     {
-        //SG-001 inverts XliffReader.cs:398's empty-element condition; SG-002 removes its branch.
+        //SG-001 inverts XliffReader.cs:400's empty-element condition; SG-002 removes its branch.
         //Both reopen a self-closing group without a matching end node.
         //The leaked OpenGroups makes complete enumeration throw before the id assertion.
         await ReaderDeadline.RunAsync(async () =>
