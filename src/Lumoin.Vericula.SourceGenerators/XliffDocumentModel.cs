@@ -24,4 +24,8 @@ internal sealed record XliffDocumentModel(
     string? Error,
     int Line,
     int Column,
-    EquatableArray<string> Warnings);
+    EquatableArray<string> Warnings)
+{
+    /// <summary>Whether the parse failure is the structural refusal of a nested file.</summary>
+    public bool HasNestedFile { get; init; }
+}

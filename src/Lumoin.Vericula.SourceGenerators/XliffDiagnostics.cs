@@ -8,6 +8,15 @@ namespace Lumoin.Vericula.SourceGenerators;
 /// </summary>
 internal static class XliffDiagnostics
 {
+    /// <summary>Reported when a file is nested inside another file outside a unit subtree.</summary>
+    public static DiagnosticDescriptor NestedFile { get; } = new(
+        id: WellKnownGeneratorDiagnostics.NestedFile,
+        title: "XLIFF file element is nested inside another file",
+        messageFormat: "The XLIFF file '{0}' could not be parsed: {1}",
+        category: "Lumoin.Vericula",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     /// <summary>
     /// Reported when an XLIFF additional file cannot be parsed at all.
     /// </summary>

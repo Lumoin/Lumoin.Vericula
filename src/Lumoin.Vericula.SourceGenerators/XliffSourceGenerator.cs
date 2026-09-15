@@ -147,6 +147,20 @@ public sealed partial class XliffSourceGenerator: IIncrementalGenerator
             }
 
             var units = ImmutableArray.CreateBuilder<UnitModel>();
+            foreach(XElement file in root.Elements(core + WellKnownXliffElements.File))
+            {
+                XElement? nested = file.Descendants(core + WellKnownXliffElements.File)
+                    .FirstOrDefault(element => !element.Ancestors(core + WellKnownXliffElements.Unit).Any());
+                if(nested is not null)
+                {
+                    string? fileId = file.Attribute(WellKnownXliffAttributes.Id)?.Value;
+
+                    return Failed(source.Path,
+                        $"A <{WellKnownXliffElements.File}> element is nested inside file '{fileId}'; XLIFF 2.1 §4.2.2.1 allows <{WellKnownXliffElements.File}> only directly under <{WellKnownXliffElements.Xliff}>.",
+                        nested) with { HasNestedFile = true };
+                }
+            }
+
             bool anyTargetSeen = false;
             foreach(XElement unit in root.Descendants(core + WellKnownXliffElements.Unit))
             {
@@ -366,7 +380,8 @@ public sealed partial class XliffSourceGenerator: IIncrementalGenerator
             if(document.Error is not null)
             {
                 context.ReportDiagnostic(Diagnostic.Create(
-                    XliffDiagnostics.ParseFailure, DocumentLocation(document), document.Path, document.Error));
+                    document.HasNestedFile ? XliffDiagnostics.NestedFile : XliffDiagnostics.ParseFailure,
+                    DocumentLocation(document), document.Path, document.Error));
                 continue;
             }
 

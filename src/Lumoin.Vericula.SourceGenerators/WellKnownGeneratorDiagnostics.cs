@@ -38,6 +38,12 @@ internal static class WellKnownGeneratorDiagnostics
     /// <summary>The id reported when a document's srcLang differs from the srcLang of the first document in path order.</summary>
     public static readonly string SourceLanguageMismatch = Utf8Constants.ToInternedString(SourceLanguageMismatchUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="NestedFile"/>.</summary>
+    public static ReadOnlySpan<byte> NestedFileUtf8 => "VFX305"u8;
+
+    /// <summary>The id reported when a file is nested inside another file outside a unit subtree.</summary>
+    public static readonly string NestedFile = Utf8Constants.ToInternedString(NestedFileUtf8);
+
     /// <summary>Determines if a diagnostic id is <see cref="ParseFailure"/>.</summary>
     /// <param name="id">The diagnostic id to test.</param>
     /// <returns><see langword="true"/> if the id is the parse-failure id; otherwise, <see langword="false"/>.</returns>
@@ -62,4 +68,9 @@ internal static class WellKnownGeneratorDiagnostics
     /// <param name="id">The diagnostic id to test.</param>
     /// <returns><see langword="true"/> if the id is the source-language-mismatch id; otherwise, <see langword="false"/>.</returns>
     public static bool IsSourceLanguageMismatch(string id) => string.Equals(id, SourceLanguageMismatch, StringComparison.Ordinal);
+
+    /// <summary>Determines if a diagnostic id is <see cref="NestedFile"/>.</summary>
+    /// <param name="id">The diagnostic id to test.</param>
+    /// <returns>Whether the id denotes a nested file.</returns>
+    public static bool IsNestedFile(string id) => string.Equals(id, NestedFile, StringComparison.Ordinal);
 }

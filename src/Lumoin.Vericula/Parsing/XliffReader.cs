@@ -352,6 +352,11 @@ public static partial class XliffReader
 
         if(WellKnownXliffElements.IsFile(name))
         {
+            if(state.InFile)
+            {
+                throw NestedFile(state.CurrentFileId);
+            }
+
             string fileId = RequireId(reader.GetAttribute(WellKnownXliffAttributes.Id), WellKnownXliffElements.File);
             if(state.FileIds.Contains(fileId))
             {
@@ -728,6 +733,14 @@ public static partial class XliffReader
     private static XliffFile ParseFile(XElement fileElement, string sourceLanguage, string? targetLanguage)
     {
         string id = RequiredId(fileElement, WellKnownXliffElements.File);
+        //The streaming walk consumes each unit as a whole, so files inside units remain outside
+        //this structural check on both paths. Include descendants through foreign containers too.
+        if(fileElement.Descendants(Core + WellKnownXliffElements.File)
+            .Any(nested => !nested.Ancestors(Core + WellKnownXliffElements.Unit).Any()))
+        {
+            throw NestedFile(id);
+        }
+
         ParsedMetadata metadata = ParseMetadata(fileElement, WellKnownXliffElements.File, allowTone: true, allowGlossary: true, allowScopesAndMetadata: false);
         ValidationRuleSet? validationRules = ParseValidation(fileElement, WellKnownXliffElements.File);
 
@@ -761,6 +774,16 @@ public static partial class XliffReader
         ValidateFile(file);
 
         return file;
+    }
+
+    /// <summary>
+    /// Builds the common refusal for a file encountered inside another file outside a unit subtree.
+    /// </summary>
+    /// <param name="fileId">The enclosing file's id.</param>
+    /// <returns>The structural format exception.</returns>
+    private static XliffFormatException NestedFile(string? fileId)
+    {
+        return new XliffFormatException($"A <{WellKnownXliffElements.File}> element is nested inside file '{fileId}'; XLIFF 2.1 §4.2.2.1 allows <{WellKnownXliffElements.File}> only directly under <{WellKnownXliffElements.Xliff}>.");
     }
 
     /// <summary>

@@ -2789,6 +2789,36 @@ public sealed class XliffSourceGeneratorTests
         return text.Replace("\r\n", "\n", StringComparison.Ordinal);
     }
 
+    /// <summary>Refuses the same nested files as all reader entry points and locates the diagnostic.</summary>
+    [TestMethod]
+    [DataRow(0, false)]
+    [DataRow(1, false)]
+    [DataRow(2, false)]
+    [DataRow(1, true)]
+    public void AFileNestedOutsideAUnitIsRefusedWithTheStructuralDiagnostic(int depth, bool wrapInnerUnit)
+    {
+        //The nested-file guard preserves reader parity for direct nesting and H-04's two
+        //counterexamples: a bare inner unit (S-045) and one wrapped in another group (S-044).
+        const string unit = "<unit id=\"u\"><segment><source>x</source></segment></unit>";
+        string inner = wrapInnerUnit ? $"<group id=\"h\">{unit}</group>" : unit;
+        string nested = $"<file id=\"inner\">{inner}</file>";
+        for(int index = 0; index < depth; index++)
+        {
+            nested = $"<group id=\"g{index}\">{nested}</group>";
+        }
+
+        string xml = $"<xliff xmlns=\"urn:oasis:names:tc:xliff:document:2.0\" version=\"2.0\" srcLang=\"en\"><file id=\"outer\">{nested}</file></xliff>";
+        var result = RunGenerator(xml, "Bootstrap", TestContext.CancellationToken);
+
+        Assert.HasCount(1, result.Diagnostics);
+        Diagnostic diagnostic = result.Diagnostics[0];
+        Assert.AreEqual(WellKnownGeneratorDiagnostics.NestedFile, diagnostic.Id);
+        Assert.AreEqual(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.AreEqual("The XLIFF file 'wallet.fi.xliff' could not be parsed: A <file> element is nested inside file 'outer'; XLIFF 2.1 §4.2.2.1 allows <file> only directly under <xliff>.", diagnostic.GetMessage(CultureInfo.InvariantCulture));
+        Assert.AreEqual(xml.IndexOf("<file id=\"inner\">", StringComparison.Ordinal) + 1, diagnostic.Location.GetLineSpan().StartLinePosition.Character);
+        Assert.HasCount(0, result.Results[0].GeneratedSources);
+    }
+
     private static GeneratorDriverRunResult RunGenerator(string xliffContent, string assemblyName, CancellationToken cancellationToken)
     {
         return RunGenerator([("wallet.fi.xliff", xliffContent)], assemblyName, cancellationToken);

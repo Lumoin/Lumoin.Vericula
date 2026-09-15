@@ -18,6 +18,12 @@ internal static class WellKnownXliffElements
     /// <summary>The root element per <see href="https://docs.oasis-open.org/xliff/xliff-core/v2.1/os/xliff-core-v2.1-os.html#xliff">XLIFF 2.1, xliff</see>.</summary>
     public static readonly string Xliff = Utf8Constants.ToInternedString(XliffUtf8);
 
+    /// <summary>The UTF-8 source literal of <see cref="File"/>.</summary>
+    public static ReadOnlySpan<byte> FileUtf8 => "file"u8;
+
+    /// <summary>A file directly beneath the document root per XLIFF 2.1 §4.2.2.1.</summary>
+    public static readonly string File = Utf8Constants.ToInternedString(FileUtf8);
+
     /// <summary>The UTF-8 source literal of <see cref="Unit"/>.</summary>
     public static ReadOnlySpan<byte> UnitUtf8 => "unit"u8;
 

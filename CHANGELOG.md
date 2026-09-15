@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Fixed
 
+- `XliffReader` refuses a `<file>` nested inside another `<file>` or a `<group>` on both the whole-document and streaming paths (XLIFF 2.1 §4.2.2.1); before, the whole-document path silently dropped the nested file's units and the streaming path miscounted the outer file's members. The source generator reports the same refusal as `VFX305`.
 - `ResxCooker` retains code-only targets that render empty under `Plain` and rejects cooked characters XML cannot carry with an error naming the unit and culture or neutral resource.
 - `ResxCooker` and the CLI `compile` command now decide whether a name segment is a culture using predefined cultures only, so the check behaves the same on Windows (NLS) and on Linux and macOS (ICU). Before, on ICU any word passed as a culture: a base name such as `Wallet.notaculture` was refused and a `wallet.Designer.resx` in the output directory was deleted as a stale satellite.
 - Package descriptions of `Lumoin.Vericula` and `Lumoin.Vericula.SourceGenerators` now describe the packages accurately and no longer end with an internal note about where the metadata is inherited from.
