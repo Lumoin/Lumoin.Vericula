@@ -892,16 +892,19 @@ public sealed class LinterTests
         Assert.Contains("segment 's1'", diagnostics[0].Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Proves the glossary scan advances past a rejected match inside an unrelated word.</summary>
     [TestMethod]
-    public void GlossaryTermDoesNotMatchInsideAnUnrelatedWord()
+    public async Task GlossaryTermDoesNotMatchInsideAnUnrelatedWord()
     {
         //r1-35: a raw substring test lets a short term match inside an unrelated word - "art" inside
         //"Start" - and raise a false VFX106. Term detection must respect Unicode word boundaries, so a
         //source that merely contains the term's letters as part of a longer word must lint clean.
-        //Linter.cs:494, ContainsTerm's advancing loop, `index++;` => `;`, and `index++` => `index--`:
+        //T-001 and T-002, Linter.cs:494, ContainsTerm's advancing loop, index++; => ; and index++ => index--:
         //both mutants make the loop re-find the same rejected "art" match inside "Start" forever
         //instead of advancing past it, hanging instead of returning false; this case is what makes
-        //the loop revisit index 2 on every pass, so it also proves both mutants by timeout.
+        //the loop revisit index 2 on every pass. The ten-second deadline makes lost progress a named
+        //assertion failure. The CPU-spinning worker cannot be cancelled and is abandoned after the
+        //assertion in a proof run, until the process exits.
         var glossary = new Glossary(ImmutableArray.Create(
             new GlossaryEntry("art", "taide", null, GlossaryEntryStatus.Preferred, ImmutableArray<Scope>.Empty, null)));
 
@@ -915,8 +918,21 @@ public sealed class LinterTests
             ImmutableArray<XliffGroup>.Empty,
             ImmutableArray.Create(Unit("A", "Start the app", "Käynnistä sovellus")));
 
-        Assert.HasCount(0, Linter.Lint(DocumentOf(file)));
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(TestContext.CancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(10));
+        try
+        {
+            var linting = Task.Run(() => Linter.Lint(DocumentOf(file)), deadline.Token);
+            Assert.HasCount(0, await linting.WaitAsync(deadline.Token));
+        }
+        catch(OperationCanceledException) when(deadline.IsCancellationRequested && !TestContext.CancellationToken.IsCancellationRequested)
+        {
+            Assert.Fail("the glossary scan did not finish within ten seconds; the search index no longer advances past a rejected match");
+        }
     }
+
+    /// <summary>Gets or sets the current test context and its cancellation token.</summary>
+    public TestContext TestContext { get; set; } = null!;
 
     [TestMethod]
     public void GlossaryTermMatchesMidSentenceInAScriptWithNoInterWordSpaces()
