@@ -389,11 +389,18 @@ public static partial class XliffReader
 
             RequireId(reader.GetAttribute(WellKnownXliffAttributes.Id), WellKnownXliffElements.Group);
 
-            return (StreamStep.Advance, state with
+            state = state with
             {
-                OpenGroups = state.OpenGroups + 1,
                 FileMembers = state.OpenGroups == 0 ? state.FileMembers + 1 : state.FileMembers
-            });
+            };
+
+            //a self-closing <group/> counts as a member but never raises an EndElement node.
+            if(reader.IsEmptyElement)
+            {
+                return (StreamStep.Advance, state);
+            }
+
+            return (StreamStep.Advance, state with { OpenGroups = state.OpenGroups + 1 });
         }
 
         if(WellKnownXliffElements.IsUnit(name))

@@ -36,6 +36,9 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public async Task StreamsUnitsInDocumentOrderFlatteningGroups()
     {
+        //SG-001 at XliffReader.cs:398 inverts the empty-element condition and skips paired-group
+        //increments. Their end nodes then make OpenGroups negative, so later file members go uncounted.
+        //Complete document-order enumeration observes the resulting empty-file refusal.
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(NestedXliff));
 
         //T-003 at XliffReader.cs:251 removes Advance(reader); T-005 at line 461 removes reader.Read().
@@ -62,6 +65,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public async Task StreamsUnitsAsynchronouslyFromAPipe()
     {
+        //SG-001 at XliffReader.cs:398 inverts the empty-element condition and skips paired-group
+        //increments. The complete asynchronous document-order assertion observes the later file refusal.
         //T-004 at XliffReader.cs:283 removes await AdvanceAsync; T-007 at line 479 removes
         //await reader.ReadAsync. Either stops priming progress; the ten-second Assert.Fail
         //names that loss while the original document-order assertion remains intact.
@@ -413,6 +418,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void StreamingRejectsValidationRulesOnAGroup()
     {
+        //SG-001 at XliffReader.cs:398 inverts the empty-element condition, leaving a paired group
+        //uncounted in OpenGroups. The required group-validation exception then disappears.
         //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
         //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
@@ -442,6 +449,8 @@ public sealed class XliffUnitStreamTests
     [TestMethod]
     public void StreamingRejectsValidationOnAGroupEvenAfterANonGroupCoreElementInsideIt()
     {
+        //SG-001 at XliffReader.cs:398 inverts the empty-element condition, leaving a paired group
+        //uncounted in OpenGroups. The required group-validation exception then disappears.
         //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
         //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
         //the existing assertions still execute unchanged inside the deadline.
@@ -982,45 +991,168 @@ public sealed class XliffUnitStreamTests
         public override ValueTask<ReadResult> ReadAsync(CancellationToken cancellationToken = default) => _inner.ReadAsync(cancellationToken);
     }
 
-    /// <summary>Pins the current empty-file refusal after a self-closing group leaves the nesting state open.</summary>
+    /// <summary>Streams the unit following a self-closing group in the same file.</summary>
     [TestMethod]
-    public void ASelfClosingGroupKeepsTheFollowingFilesGroupUncounted()
+    public void ASelfClosingGroupAllowsTheFollowingUnitInTheSameFile()
     {
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
-        //the existing assertions still execute unchanged inside the deadline.
+        //SG-001 inverts XliffReader.cs:398's empty-element condition; SG-002 removes its branch.
+        //Both reopen a self-closing group without a matching end node.
+        //The id assertion preserves same-file streaming alongside the cross-file killers.
         ReaderDeadline.Run(() =>
         {
-            //S-044 at XliffReader.cs:395 forces the group member-count conditional true. A self-closing
-            //group has no EndElement, so OpenGroups leaks into the next file even after the nested-file
-            //guard. The original reports that second file empty; the mutant incorrectly removes this
-            //observable refusal. This pins the current defect for mutation proof, not the desired design.
-            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(
-                "<xliff xmlns=\"urn:oasis:names:tc:xliff:document:2.0\" version=\"2.0\" srcLang=\"en\"><file id=\"first\"><group id=\"g\"/></file><file id=\"second\"><group id=\"h\"/></file></xliff>"));
+            const string xliff = """
+                <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" xmlns:val="urn:oasis:names:tc:xliff:validation:2.0" version="2.0" srcLang="en">
+                  <file id="first"><group id="g"/><unit id="A"><segment><source>Home</source></segment></unit></file>
+                </xliff>
+                """;
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xliff));
 
-            var exception = Assert.ThrowsExactly<XliffFormatException>(() => XliffReader.ReadUnits(stream).ToArray());
-            Assert.AreEqual("File 'second' has no <unit> or <group> element; XLIFF 2.1 §4.2.2.2 requires at least one.", exception.Message);
+            string[] ids = XliffReader.ReadUnits(stream).Select(unit => unit.Id).ToArray();
+
+            CollectionAssert.AreEqual(SingleId, ids);
         }, TestContext.CancellationToken);
     }
 
-    /// <summary>Pins the current empty-file refusal for a unit following a file with a self-closing group.</summary>
+    /// <summary>Streams the unit following a self-closing group in the same file.</summary>
     [TestMethod]
-    public void ASelfClosingGroupKeepsTheFollowingFilesUnitUncounted()
+    public async Task ASelfClosingGroupAllowsTheFollowingUnitInTheSameFileAsynchronously()
     {
-        //T-003 at XliffReader.cs:251 and T-005 at line 461 remove synchronous progress;
-        //T-006 at line 465 swallows a read error. Abandon a spinning worker after a named failure;
-        //the existing assertions still execute unchanged inside the deadline.
+        //SG-001 inverts XliffReader.cs:398's empty-element condition; SG-002 removes its branch.
+        //Both reopen a self-closing group without a matching end node.
+        //The id assertion preserves same-file streaming alongside the cross-file killers.
+        await ReaderDeadline.RunAsync(async () =>
+        {
+            const string xliff = """
+                <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" xmlns:val="urn:oasis:names:tc:xliff:validation:2.0" version="2.0" srcLang="en">
+                  <file id="first"><group id="g"/><unit id="A"><segment><source>Home</source></segment></unit></file>
+                </xliff>
+                """;
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xliff));
+            PipeReader input = PipeReader.Create(stream);
+            List<string> ids = [];
+            try
+            {
+                await foreach(XliffUnit unit in XliffReader.ReadUnitsAsync(input, TestContext.CancellationToken))
+                {
+                    ids.Add(unit.Id);
+                }
+            }
+            finally
+            {
+                await input.CompleteAsync();
+            }
+
+            CollectionAssert.AreEqual(SingleId, ids);
+        }, TestContext.CancellationToken);
+    }
+
+    /// <summary>Streams both files completely after a self-closing group.</summary>
+    [TestMethod]
+    public void ASelfClosingGroupAllowsUnitsInTheFollowingFile()
+    {
+        //SG-001 inverts XliffReader.cs:398's empty-element condition; SG-002 removes its branch.
+        //Both reopen a self-closing group without a matching end node.
+        //The leaked OpenGroups makes complete enumeration throw before the id assertion.
         ReaderDeadline.Run(() =>
         {
-            //S-045 at XliffReader.cs:406 forces the unit member-count conditional true. The first file's
-            //self-closing group leaves OpenGroups positive in the next file; its unit is uncounted in
-            //the original. The mutant removes the asserted second-file refusal despite the nested-file
-            //guard. This exposes a separate existing state bug that prevents an equivalence verdict.
-            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(
-                "<xliff xmlns=\"urn:oasis:names:tc:xliff:document:2.0\" version=\"2.0\" srcLang=\"en\"><file id=\"first\"><group id=\"g\"/></file><file id=\"second\"><unit id=\"A\"><segment><source>x</source></segment></unit></file></xliff>"));
+            const string xliff = """
+                <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" xmlns:val="urn:oasis:names:tc:xliff:validation:2.0" version="2.0" srcLang="en">
+                  <file id="first"><group id="g"/><unit id="A"><segment><source>Home</source></segment></unit></file><file id="second"><unit id="B"><segment><source>Two</source></segment></unit></file>
+                </xliff>
+                """;
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xliff));
 
-            var exception = Assert.ThrowsExactly<XliffFormatException>(() => XliffReader.ReadUnits(stream).ToArray());
-            Assert.AreEqual("File 'second' has no <unit> or <group> element; XLIFF 2.1 §4.2.2.2 requires at least one.", exception.Message);
+            string[] ids = XliffReader.ReadUnits(stream).Select(unit => unit.Id).ToArray();
+
+            CollectionAssert.AreEqual(TwoIds, ids);
+        }, TestContext.CancellationToken);
+    }
+
+    /// <summary>Streams both files completely after a self-closing group.</summary>
+    [TestMethod]
+    public async Task ASelfClosingGroupAllowsUnitsInTheFollowingFileAsynchronously()
+    {
+        //SG-001 inverts XliffReader.cs:398's empty-element condition; SG-002 removes its branch.
+        //Both reopen a self-closing group without a matching end node.
+        //The leaked OpenGroups makes complete enumeration throw before the id assertion.
+        await ReaderDeadline.RunAsync(async () =>
+        {
+            const string xliff = """
+                <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" xmlns:val="urn:oasis:names:tc:xliff:validation:2.0" version="2.0" srcLang="en">
+                  <file id="first"><group id="g"/><unit id="A"><segment><source>Home</source></segment></unit></file><file id="second"><unit id="B"><segment><source>Two</source></segment></unit></file>
+                </xliff>
+                """;
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xliff));
+            PipeReader input = PipeReader.Create(stream);
+            List<string> ids = [];
+            try
+            {
+                await foreach(XliffUnit unit in XliffReader.ReadUnitsAsync(input, TestContext.CancellationToken))
+                {
+                    ids.Add(unit.Id);
+                }
+            }
+            finally
+            {
+                await input.CompleteAsync();
+            }
+
+            CollectionAssert.AreEqual(TwoIds, ids);
+        }, TestContext.CancellationToken);
+    }
+
+    /// <summary>Accepts file-level validation following a self-closing group.</summary>
+    [TestMethod]
+    public void ASelfClosingGroupAllowsFollowingFileLevelValidation()
+    {
+        //SG-001 inverts XliffReader.cs:398's empty-element condition; SG-002 removes its branch.
+        //Both reopen a self-closing group without a matching end node.
+        //The leaked OpenGroups makes complete enumeration throw before the id assertion.
+        ReaderDeadline.Run(() =>
+        {
+            const string xliff = """
+                <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" xmlns:val="urn:oasis:names:tc:xliff:validation:2.0" version="2.0" srcLang="en">
+                  <file id="first"><group id="g"/><val:validation><val:rule isPresent="x"/></val:validation><unit id="A"><segment><source>Home</source></segment></unit></file>
+                </xliff>
+                """;
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xliff));
+
+            string[] ids = XliffReader.ReadUnits(stream).Select(unit => unit.Id).ToArray();
+
+            CollectionAssert.AreEqual(SingleId, ids);
+        }, TestContext.CancellationToken);
+    }
+
+    /// <summary>Accepts file-level validation following a self-closing group.</summary>
+    [TestMethod]
+    public async Task ASelfClosingGroupAllowsFollowingFileLevelValidationAsynchronously()
+    {
+        //SG-001 inverts XliffReader.cs:398's empty-element condition; SG-002 removes its branch.
+        //Both reopen a self-closing group without a matching end node.
+        //The leaked OpenGroups makes complete enumeration throw before the id assertion.
+        await ReaderDeadline.RunAsync(async () =>
+        {
+            const string xliff = """
+                <xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" xmlns:val="urn:oasis:names:tc:xliff:validation:2.0" version="2.0" srcLang="en">
+                  <file id="first"><group id="g"/><val:validation><val:rule isPresent="x"/></val:validation><unit id="A"><segment><source>Home</source></segment></unit></file>
+                </xliff>
+                """;
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xliff));
+            PipeReader input = PipeReader.Create(stream);
+            List<string> ids = [];
+            try
+            {
+                await foreach(XliffUnit unit in XliffReader.ReadUnitsAsync(input, TestContext.CancellationToken))
+                {
+                    ids.Add(unit.Id);
+                }
+            }
+            finally
+            {
+                await input.CompleteAsync();
+            }
+
+            CollectionAssert.AreEqual(SingleId, ids);
         }, TestContext.CancellationToken);
     }
 
