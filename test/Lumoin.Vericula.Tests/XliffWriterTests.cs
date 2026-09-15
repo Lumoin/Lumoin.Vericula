@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Collections.Immutable;
 using System.IO.Pipelines;
 using System.Text;
@@ -1599,6 +1600,231 @@ public sealed class XliffWriterTests
         XliffFile file = NewFile("wallet", "en", null, [outer], []);
 
         AssertRejected(new XliffDocument(XliffVersion.V20, [file]), "Duplicate unit id 'A'");
+    }
+
+    /// <summary>Verifies that a suspended pipe write does not capture the caller's context.</summary>
+    [TestMethod]
+    public async Task WriteAsyncToAPipeWriterResumesWithoutPostingBackToTheCallersSynchronizationContext()
+    {
+        //XliffWriter.cs:88: kills the mutant that replaces ConfigureAwait(false) with ConfigureAwait(true).
+        XliffDocument document = Read(Encoding.UTF8.GetBytes(XliffReaderTests.WalletXliff));
+        var gate = new TaskCompletionSource<FlushResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var writer = new GatedPipeWriter(gate.Task);
+
+        await AssertResumesWithoutPostingToTheCallersContext(
+            () => XliffWriter.WriteAsync(document, writer, TestContext.CancellationToken),
+            () => gate.SetResult(default), TestContext.CancellationToken);
+    }
+
+    /// <summary>Verifies that a suspended stream write does not capture the caller's context.</summary>
+    [TestMethod]
+    public async Task WriteAsyncToAStreamResumesWithoutPostingBackToTheCallersSynchronizationContext()
+    {
+        //XliffWriter.cs:125: kills the mutant that replaces ConfigureAwait(false) with ConfigureAwait(true).
+        XliffDocument document = Read(Encoding.UTF8.GetBytes(XliffReaderTests.WalletXliff));
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var stream = new GatedStream(gate.Task, Task.CompletedTask);
+
+        await AssertResumesWithoutPostingToTheCallersContext(
+            () => XliffWriter.WriteAsync(document, stream, TestContext.CancellationToken),
+            gate.SetResult, TestContext.CancellationToken);
+    }
+
+    /// <summary>Verifies that a suspended stream flush does not capture the caller's context.</summary>
+    [TestMethod]
+    public async Task WriteAsyncToAStreamFlushesWithoutPostingBackToTheCallersSynchronizationContext()
+    {
+        //XliffWriter.cs:126: kills the mutant that replaces ConfigureAwait(false) with ConfigureAwait(true).
+        //The write completes synchronously so the caller's context is still current when flush suspends.
+        XliffDocument document = Read(Encoding.UTF8.GetBytes(XliffReaderTests.WalletXliff));
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var stream = new GatedStream(Task.CompletedTask, gate.Task);
+
+        await AssertResumesWithoutPostingToTheCallersContext(
+            () => XliffWriter.WriteAsync(document, stream, TestContext.CancellationToken),
+            gate.SetResult, TestContext.CancellationToken);
+    }
+
+    /// <summary>Verifies that target inline field validation names the affected unit and side.</summary>
+    [TestMethod]
+    public void RejectsAnInlineIdOnTheTargetSideThatIsNotAnXmlNameToken()
+    {
+        //XliffWriter.cs:975: kills the mutant that replaces $"the target of unit '{unit.Id}'" with $"".
+        //XliffWriter.cs:977: kills the mutant that replaces the target field's yield return problem; with ;.
+        var placeholder = new PlaceholderPart("bad id", InlineCodeType.None, null, "", null, null, null,
+            true, true, ReorderHint.Yes, null, null);
+        var segment = new XliffSegment(null, SegmentKind.Translatable, InlineContent.FromText("Home"),
+            InlineContent.Create([placeholder]), SegmentState.Translated, null);
+        XliffUnit unit = NewUnit("u", "Home") with { Segments = [segment] };
+        XliffFile file = NewFile("wallet", "en", "fi", [], [unit]);
+
+        AssertRejected(new XliffDocument(XliffVersion.V21, [file]),
+            "inline id in the target of unit 'u' is not an XML name token");
+    }
+
+    /// <summary>Verifies immediately that synchronous writing publishes the pipe's end of data.</summary>
+    [TestMethod]
+    public void WriteCompletesThePipeWriterSoTheReaderObservesEndOfData()
+    {
+        //XliffWriter.cs:68: kills the mutant that replaces output.Complete(); with ;.
+        //TryRead also detects unpublished bytes without waiting for DrainAsync's timeout.
+        XliffDocument document = Read(Encoding.UTF8.GetBytes(XliffReaderTests.WalletXliff));
+        var pipe = new Pipe();
+        try
+        {
+            XliffWriter.Write(document, pipe.Writer);
+            bool read = pipe.Reader.TryRead(out ReadResult result);
+            if(read)
+            {
+                pipe.Reader.AdvanceTo(result.Buffer.End);
+            }
+
+            Assert.IsTrue(result.IsCompleted, "The reader must immediately observe the completed writer.");
+        }
+        finally
+        {
+            pipe.Writer.Complete();
+            pipe.Reader.Complete();
+        }
+    }
+
+    /// <summary>Verifies immediately that asynchronous writing publishes the pipe's end of data.</summary>
+    [TestMethod]
+    public async Task WriteAsyncCompletesThePipeWriterSoTheReaderObservesEndOfData()
+    {
+        //XliffWriter.cs:89: kills the mutant that replaces await output.CompleteAsync().ConfigureAwait(false); with ;.
+        XliffDocument document = Read(Encoding.UTF8.GetBytes(XliffReaderTests.WalletXliff));
+        var pipe = new Pipe();
+        try
+        {
+            await XliffWriter.WriteAsync(document, pipe.Writer, TestContext.CancellationToken);
+            bool read = pipe.Reader.TryRead(out ReadResult result);
+            if(read)
+            {
+                pipe.Reader.AdvanceTo(result.Buffer.End);
+            }
+
+            Assert.IsTrue(result.IsCompleted, "The reader must immediately observe the completed writer.");
+        }
+        finally
+        {
+            pipe.Writer.Complete();
+            pipe.Reader.Complete();
+        }
+    }
+
+    /// <summary>Starts an operation under a recording context and releases its gate only after suspension.</summary>
+    private static async Task AssertResumesWithoutPostingToTheCallersContext(
+        Func<Task> start, Action release, CancellationToken cancellationToken)
+    {
+        var recorder = new RecordingSynchronizationContext();
+        SynchronizationContext? previous = SynchronizationContext.Current;
+        Task pending;
+        SynchronizationContext.SetSynchronizationContext(recorder);
+        try
+        {
+            pending = start();
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+
+        try
+        {
+            Assert.IsFalse(pending.IsCompleted, "The operation must suspend before its gate is released.");
+        }
+        finally
+        {
+            release();
+        }
+
+        await pending.WaitAsync(TimeSpan.FromSeconds(10), cancellationToken);
+        Assert.AreEqual(0, recorder.PostCount, "The writer must not post its continuation to the caller's context.");
+    }
+
+    /// <summary>Records captured continuations while allowing them to finish on the thread pool.</summary>
+    private sealed class RecordingSynchronizationContext : SynchronizationContext
+    {
+        /// <summary>The number of continuations posted to this context.</summary>
+        private int postCount;
+
+        /// <summary>Gets the number of continuations posted to this context.</summary>
+        public int PostCount => Volatile.Read(ref postCount);
+
+        /// <summary>Records a continuation and dispatches it without installing this context.</summary>
+        public override void Post(SendOrPostCallback d, object? state)
+        {
+            Interlocked.Increment(ref postCount);
+            ThreadPool.QueueUserWorkItem(_ => d(state));
+        }
+    }
+
+    /// <summary>Buffers a pipe write and keeps its flush suspended until the test releases a gate.</summary>
+    private sealed class GatedPipeWriter : PipeWriter
+    {
+        /// <summary>Stores the bytes supplied through the base pipe write implementation.</summary>
+        private readonly ArrayBufferWriter<byte> buffer = new();
+
+        /// <summary>Controls completion of the asynchronous flush.</summary>
+        private readonly Task<FlushResult> flushGate;
+
+        /// <summary>Creates a writer whose flush awaits the supplied gate.</summary>
+        public GatedPipeWriter(Task<FlushResult> flushGate)
+        {
+            this.flushGate = flushGate;
+        }
+
+        /// <summary>Commits bytes to the backing buffer.</summary>
+        public override void Advance(int bytes) => buffer.Advance(bytes);
+
+        /// <summary>Provides writable memory for the base write implementation.</summary>
+        public override Memory<byte> GetMemory(int sizeHint = 0) => buffer.GetMemory(sizeHint);
+
+        /// <summary>Provides writable space for the base write implementation.</summary>
+        public override Span<byte> GetSpan(int sizeHint = 0) => buffer.GetSpan(sizeHint);
+
+        /// <summary>Leaves release of the flush gate under the test's control.</summary>
+        public override void CancelPendingFlush()
+        {
+        }
+
+        /// <summary>Completes synchronously through the base CompleteAsync implementation.</summary>
+        public override void Complete(Exception? exception = null)
+        {
+        }
+
+        /// <summary>Returns the pending flush gate without capturing a synchronization context.</summary>
+        public override ValueTask<FlushResult> FlushAsync(CancellationToken cancellationToken = default) =>
+            new(flushGate.WaitAsync(cancellationToken));
+    }
+
+    /// <summary>Gates stream writes and flushes independently so each await can be observed.</summary>
+    private sealed class GatedStream : MemoryStream
+    {
+        /// <summary>Controls completion of the asynchronous write.</summary>
+        private readonly Task writeGate;
+
+        /// <summary>Controls completion of the asynchronous flush.</summary>
+        private readonly Task flushGate;
+
+        /// <summary>Creates a stream with independently controlled write and flush completion.</summary>
+        public GatedStream(Task writeGate, Task flushGate)
+        {
+            this.writeGate = writeGate;
+            this.flushGate = flushGate;
+        }
+
+        /// <summary>Stores the bytes and returns the write gate without capturing a context.</summary>
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            base.Write(buffer.Span);
+
+            return new ValueTask(writeGate.WaitAsync(cancellationToken));
+        }
+
+        /// <summary>Returns the flush gate without capturing a synchronization context.</summary>
+        public override Task FlushAsync(CancellationToken cancellationToken) => flushGate.WaitAsync(cancellationToken);
     }
 
     public TestContext TestContext { get; set; } = null!;
