@@ -4,7 +4,9 @@ namespace Lumoin.Vericula.MessageFormat.Diagnostics;
 
 /// <summary>
 /// Thrown when <see cref="Parsing.MessageFormatReader.Parse(string)"/> is given a message that does
-/// not parse to a valid model: a syntax error, or one or more data model errors.
+/// not parse to a valid model (a syntax error, or one or more data model errors), or when a strict
+/// <see cref="Evaluation.MessageEvaluator"/> method cannot format a message without a resolution or
+/// function-call finding.
 /// </summary>
 public sealed class MessageFormatException: Exception
 {

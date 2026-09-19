@@ -14,8 +14,10 @@ namespace Lumoin.Vericula.MessageFormat.Tests;
 /// suite's static errors: a syntactic and data-model parse alone detects every one of them, with no
 /// variable resolution or function invocation, and this slice's parser reports exactly these seven,
 /// under the matching <see cref="WellKnownMessageFormatDiagnostics"/> ids <see cref="ToDiagnosticId"/>
-/// maps them to. The remaining six are runtime errors raised while formatting, for a later slice's
-/// evaluator to report.
+/// maps them to. The remaining six (<see cref="UnresolvedVariable"/> through <see cref="BadVariantKey"/>)
+/// are runtime errors raised while formatting, for a later slice's evaluator to report; they too now
+/// have matching <see cref="WellKnownMessageFormatDiagnostics"/> ids, which <see cref="ToDiagnosticId"/>
+/// also maps them to.
 /// </remarks>
 public static class WellKnownSuiteErrorTypes
 {
@@ -174,16 +176,12 @@ public static class WellKnownSuiteErrorTypes
         || IsMissingSelectorAnnotation(type) || IsDuplicateDeclaration(type) || IsDuplicateOptionName(type) || IsDuplicateVariant(type);
 
     /// <summary>
-    /// Maps one of the suite's seven static error types to the <see cref="WellKnownMessageFormatDiagnostics"/>
-    /// id this slice's parser reports for it.
+    /// Maps one of the suite's thirteen error types to the <see cref="WellKnownMessageFormatDiagnostics"/>
+    /// id this slice's parser, or a later slice's evaluator, reports for it.
     /// </summary>
     /// <param name="type">One of the suite's thirteen <c>expErrors[].type</c> strings.</param>
     /// <returns>The matching <c>VFX2xx</c> id.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="type"/> is one of the suite's six runtime error types (<see cref="UnresolvedVariable"/>,
-    /// <see cref="UnknownFunction"/>, <see cref="BadSelector"/>, <see cref="BadOperand"/>, <see cref="BadOption"/>
-    /// or <see cref="BadVariantKey"/>), or an unrecognized string: none of these has a <c>VFX2xx</c> id yet.
-    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="type"/> is not one of the suite's thirteen known error type strings.</exception>
     public static string ToDiagnosticId(string type) => type switch
     {
         _ when IsSyntaxError(type) => WellKnownMessageFormatDiagnostics.SyntaxError,
@@ -193,6 +191,12 @@ public static class WellKnownSuiteErrorTypes
         _ when IsDuplicateDeclaration(type) => WellKnownMessageFormatDiagnostics.DuplicateDeclaration,
         _ when IsDuplicateOptionName(type) => WellKnownMessageFormatDiagnostics.DuplicateOptionName,
         _ when IsDuplicateVariant(type) => WellKnownMessageFormatDiagnostics.DuplicateVariant,
-        _ => throw new ArgumentOutOfRangeException(nameof(type), type, "The suite's runtime error types have no VFX2xx id yet.")
+        _ when IsUnresolvedVariable(type) => WellKnownMessageFormatDiagnostics.UnresolvedVariable,
+        _ when IsUnknownFunction(type) => WellKnownMessageFormatDiagnostics.UnknownFunction,
+        _ when IsBadSelector(type) => WellKnownMessageFormatDiagnostics.BadSelector,
+        _ when IsBadOperand(type) => WellKnownMessageFormatDiagnostics.BadOperand,
+        _ when IsBadOption(type) => WellKnownMessageFormatDiagnostics.BadOption,
+        _ when IsBadVariantKey(type) => WellKnownMessageFormatDiagnostics.BadVariantKey,
+        _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Not one of the suite's thirteen known error type strings.")
     };
 }

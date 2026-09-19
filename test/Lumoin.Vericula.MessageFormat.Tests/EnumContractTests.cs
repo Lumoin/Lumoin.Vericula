@@ -1,20 +1,22 @@
 using System.Reflection;
 using Lumoin.Vericula.MessageFormat.DataModel;
+using Lumoin.Vericula.MessageFormat.Evaluation;
 using Lumoin.Vericula.MessageFormat.Parsing;
 
 namespace Lumoin.Vericula.MessageFormat.Tests;
 
 /// <summary>
 /// Reflection tests holding every enum in the MessageFormat assembly, public or private, to the
-/// owner's numeric contract, plus the specifics of <see cref="MarkupKind.None"/> as the uninitialized
-/// value the parser never produces. The source-text scan lives in the core project's
-/// <c>EnumContractTests</c>, which walks the whole <c>src</c> tree including this project.
+/// owner's numeric contract, plus the specifics of <see cref="MarkupKind.None"/>,
+/// <see cref="MessageDirection.Unknown"/> and <see cref="MessageBidiStrategy.Default"/> as the
+/// load-bearing default values of their respective enums. The source-text scan lives in the core
+/// project's <c>EnumContractTests</c>, which walks the whole <c>src</c> tree including this project.
 /// </summary>
 [TestClass]
 public sealed class EnumContractTests
 {
     /// <summary>The number of enum types, public and private (including nested), the MessageFormat assembly is expected to declare.</summary>
-    private const int ExpectedMessageFormatEnumCount = 2;
+    private const int ExpectedMessageFormatEnumCount = 8;
 
     /// <summary>
     /// Walks every enum type in the MessageFormat assembly, public or private, and asserts its members
@@ -71,6 +73,42 @@ public sealed class EnumContractTests
         MarkupPart close = ParsedMarkup("{#b}bold{/b}", partIndex: 2);
         Assert.AreEqual(MarkupKind.Close, close.Kind);
         Assert.AreNotEqual(MarkupKind.None, close.Kind);
+    }
+
+    /// <summary>
+    /// <see cref="MessageDirection.Unknown"/> is the value a default-initialized
+    /// <see cref="MessageDirection"/> holds, numerically zero: no direction is known or has been
+    /// forced.
+    /// </summary>
+    [TestMethod]
+    public void MessageDirectionUnknownIsTheDefaultValue()
+    {
+        //Kills a hypothetical reordering of MessageDirection.cs's members (Unknown moved off position
+        //0): the default(MessageDirection) below would then read Ltr or Rtl instead of Unknown, and
+        //the numeric check would fail even if the AreEqual against the named member still passed.
+        MessageDirection defaultValue = default;
+        Assert.AreEqual(MessageDirection.Unknown, defaultValue);
+
+        int unknownValue = (int)MessageDirection.Unknown;
+        Assert.AreEqual(0, unknownValue);
+    }
+
+    /// <summary>
+    /// <see cref="MessageBidiStrategy.Default"/> is the value a default-initialized
+    /// <see cref="MessageBidiStrategy"/> holds, numerically zero: isolating controls are mandatory
+    /// unless a caller opts out with <see cref="MessageBidiStrategy.None"/>.
+    /// </summary>
+    [TestMethod]
+    public void MessageBidiStrategyDefaultIsTheDefaultValue()
+    {
+        //Kills a hypothetical reordering of MessageBidiStrategy.cs's members (Default moved off
+        //position 0): the default(MessageBidiStrategy) below would then read None instead of Default,
+        //and the numeric check would fail even if the AreEqual against the named member still passed.
+        MessageBidiStrategy defaultValue = default;
+        Assert.AreEqual(MessageBidiStrategy.Default, defaultValue);
+
+        int defaultStrategyValue = (int)MessageBidiStrategy.Default;
+        Assert.AreEqual(0, defaultStrategyValue);
     }
 
     /// <summary>

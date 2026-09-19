@@ -11,10 +11,8 @@ namespace Lumoin.Vericula.MessageFormat.Tests;
 /// vocabulary layer depends on: an interned string field decodes to exactly the UTF-8 source literal
 /// it is built from, and an <c>IsX</c> predicate compares its own value ordinally rather than by a
 /// looser or case-insensitive rule. Mirrors <c>Lumoin.Vericula.Tests.WellKnownVocabularyTests</c> for
-/// this pair of assemblies: today it exercises the MessageFormat assembly's
-/// <see cref="Lumoin.Vericula.MessageFormat.Diagnostics.WellKnownMessageFormatDiagnostics"/> and this
-/// test assembly's <see cref="WellKnownSuiteErrorTypes"/>, and picks up any future <c>WellKnown*</c>
-/// class in either assembly automatically.
+/// this pair of assemblies, and picks up any current or future <c>WellKnown*</c> class in either
+/// assembly automatically, with no enumeration to keep in step.
 /// </summary>
 [TestClass]
 public sealed class WellKnownVocabularyTests
